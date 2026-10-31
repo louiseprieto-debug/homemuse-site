@@ -312,6 +312,11 @@ footer .brand{color:var(--night-ink)}
 .lang-btn span.on{opacity:1;border-bottom-color:var(--gold-2)}
 .head-in .nav{order:2}.head-in .menu-btn{order:4}
 @media (max-width:960px){.lang-btn{margin-left:auto}}
+
+.guide-cover{margin:0;display:flex;justify-content:center}
+.guide-cover img{width:min(360px,80%);box-shadow:0 30px 60px -30px rgba(19,32,58,.55);transform:rotate(-2deg);border:1px solid var(--line)}
+.guide-form{background:var(--surface);border:1px solid var(--line);border-top:2px solid var(--gold);padding:6px 6px 0;max-width:520px}
+.guide-form iframe{display:block;width:100%;height:150px;border:0;background:transparent}
 /* ---- pop of gold ---- */
 :root{--gold-grad:linear-gradient(100deg,#93651D 0%,#C99A45 30%,#EBD08E 50%,#C99A45 70%,#93651D 100%)}
 .btn{background:var(--gold-grad);background-size:220% 100%;background-position:0% 0;border:0;color:#16203A;box-shadow:0 10px 24px -14px rgba(147,101,29,.9);transition:background-position .6s ease,box-shadow .3s}
@@ -343,6 +348,8 @@ footer .brand-word{color:#EBD08E}
 html{-webkit-text-size-adjust:100%}
 body{margin:0}
 .film video{pointer-events:none}
+main{overflow-x:clip}
+@media (max-width:880px){.frame.offset{margin-right:28px}}
 .hero.film::after{background:linear-gradient(90deg,rgba(10,16,30,.5) 0%,rgba(10,16,30,.22) 60%,rgba(10,16,30,.05) 100%),linear-gradient(180deg,rgba(10,16,30,.4) 0%,rgba(10,16,30,.1) 40%,rgba(10,16,30,.55) 100%)}
 .film video::-webkit-media-controls,.film video::-webkit-media-controls-panel,.film video::-webkit-media-controls-overlay-play-button,.film video::-webkit-media-controls-start-playback-button{display:none!important;-webkit-appearance:none;opacity:0}
 .nav a,.brand-word{white-space:nowrap}
