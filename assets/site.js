@@ -8,7 +8,17 @@
   var vids=document.querySelectorAll("video");
   if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches){vids.forEach(function(v){v.removeAttribute("autoplay");v.pause()})}
   else{
-    function go(v){v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){})}
+    var safari=/^((?!chrome|chromium|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
+    function swap(v){
+      /* Safari can refuse to autoplay a video but always plays an MP4 placed in an image tag */
+      if(!safari||!v.parentNode||v.__swapped)return;v.__swapped=true;
+      var s=v.querySelector("source"),img=document.createElement("img");
+      img.src=s?s.src:v.currentSrc;img.alt="";img.setAttribute("aria-hidden","true");
+      img.onerror=function(){img.src=v.getAttribute("poster")};
+      v.parentNode.replaceChild(img,v);
+    }
+    function go(v){if(v.__swapped)return;v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){swap(v)});
+      setTimeout(function(){var r=v.getBoundingClientRect();if(v.paused&&r.top<innerHeight&&r.bottom>0)swap(v)},1800)}
     vids.forEach(function(v){v.muted=true;v.defaultMuted=true;v.playsInline=true;v.setAttribute("muted","");v.setAttribute("playsinline","")});
     if("IntersectionObserver" in window){
       var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){go(e.target)}else{e.target.pause()}})},{threshold:0.1});
