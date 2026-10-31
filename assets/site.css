@@ -342,6 +342,8 @@ footer .brand-word{color:#EBD08E}
 
 html{-webkit-text-size-adjust:100%}
 body{margin:0}
+.film video{pointer-events:none}
+.film video::-webkit-media-controls,.film video::-webkit-media-controls-panel,.film video::-webkit-media-controls-overlay-play-button,.film video::-webkit-media-controls-start-playback-button{display:none!important;-webkit-appearance:none;opacity:0}
 .nav a,.brand-word{white-space:nowrap}
 @media (max-width:1240px){.nav{gap:20px}.brand-sub{display:none}}
 @media (max-width:520px){.brand-word{font-size:1.08rem;letter-spacing:.22em}.head-in{gap:12px}}
