@@ -125,7 +125,7 @@
     var short={sell:FR?"Vente":"Selling",stay:FR?"J'y reste":"Staying",rent:FR?"Location":"Renting",other:FR?"Autre":"Other"}[A.situation]||"";
     data._subject=T.subj(first,short);data._replyto=email;data._template="table";data._captcha="false";
     var btn=form.querySelector("button[type=submit]"),label=btn.textContent;btn.disabled=true;btn.textContent=T.sending;
-    function done(){show("thanks")}
+    function done(){show("thanks");window.hmTrack&&window.hmTrack("Lead",{content_name:"Pre-call quiz"})}
     function fallback(){
       var body=Object.keys(data).filter(function(k){return k.charAt(0)!=="_"}).map(function(k){return k+": "+data[k]}).join("\n");
       location.href="mailto:"+INBOX+"?subject="+encodeURIComponent(data._subject)+"&body="+encodeURIComponent(body);
