@@ -1,8 +1,8 @@
-/* Home Muse: cookie consent + Meta Pixel (1054417427611393).
+/* Home Muse: cookie consent + Meta Pixel (1669159834859239).
    The pixel loads ONLY after the visitor clicks "Accept". The choice is remembered for 6 months.
    Tracked: PageView, Lead (newsletter / free guide links, quiz sent), Schedule (booking links). */
 (function () {
-  var PIXEL = "1054417427611393", KEY = "hm_consent", MAX = 182 * 864e5;
+  var PIXEL = "1669159834859239", KEY = "hm_consent", MAX = 182 * 864e5;
   var FR = (document.documentElement.lang || "").indexOf("fr") === 0;
   var T = FR ? {
     msg: "J'utilise des cookies Meta pour mesurer l'efficacité de mes publicités. Rien ne s'active sans votre accord.",
