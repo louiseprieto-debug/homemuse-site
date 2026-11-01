@@ -360,6 +360,26 @@ footer .brand-word{color:#EBD08E}
 .teaser-actions .small{color:var(--ink-3)}
 @media (max-width:880px){.letter-latest .teaser{grid-template-columns:1fr;gap:28px}}
 
+.plans-sec{background:var(--sand)}
+.head.center{text-align:center;margin-left:auto;margin-right:auto}
+.head.center .sec-title::after,.head.center h2::after{margin-left:auto;margin-right:auto}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch;margin-top:48px}
+.plan{position:relative;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);padding:40px 32px 36px;text-align:left}
+.plan-star{border:1px solid var(--gold);box-shadow:0 30px 60px -36px rgba(147,101,29,.55);transform:translateY(-12px)}
+.plan-badge{position:absolute;top:-13px;left:32px;background:var(--gold-grad);color:#16203A;font:500 10.5px var(--body);letter-spacing:.22em;text-transform:uppercase;padding:6px 14px}
+.plan-name{font-family:var(--display);font-weight:400;font-size:30px;margin:0;color:var(--navy)}
+.plan-price{font-family:var(--body);font-size:15px;color:var(--ink-2);margin:18px 0 4px}
+.plan-price span{font-family:var(--display);font-size:46px;line-height:1;color:var(--navy);margin-right:4px}
+.plan-note{font-size:13.5px;color:var(--gold);margin:0 0 24px;font-style:italic;font-family:var(--display);font-size:17px}
+.plan-list{list-style:none;padding:0;margin:0 0 30px;flex:1}
+.plan-list li{position:relative;padding:12px 0 12px 22px;border-top:1px solid var(--line);font-size:15px;color:var(--ink-2);line-height:1.5}
+.plan-list li::before{content:"";position:absolute;left:2px;top:20px;width:6px;height:6px;background:var(--gold);transform:rotate(45deg)}
+.plan-list b{font-weight:500;color:var(--navy)}
+.plan .btn{width:100%;margin-top:0}
+.head.center .sec-sub,.head.center p{margin-left:auto!important;margin-right:auto!important;text-align:center}
+.plans-foot{text-align:center!important;max-width:none!important;font-size:13px;color:var(--ink-3);margin:40px 0 0;letter-spacing:.04em}
+@media (max-width:980px){.plans{grid-template-columns:1fr;max-width:480px;margin-left:auto;margin-right:auto}.plan-star{transform:none;order:-1}}
+
 html{-webkit-text-size-adjust:100%}
 body{margin:0}
 .film video{pointer-events:none}
