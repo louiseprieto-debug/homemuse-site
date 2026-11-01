@@ -345,6 +345,21 @@ h3.sec-title::after{width:44px;margin-top:16px}
 footer .brand-word{color:#EBD08E}
 @media (prefers-reduced-motion:reduce){.btn{transition:none}}
 
+
+.letter-latest .teaser{display:grid;grid-template-columns:1.05fr 1fr;gap:56px;align-items:center}
+.teaser-img{display:block;overflow:hidden;border:1px solid var(--line)}
+.teaser-img img{width:100%;height:auto!important;aspect-ratio:16/10!important;object-fit:cover;display:block;transition:transform .8s ease}
+.teaser-img:hover img{transform:scale(1.03)}
+.teaser-title{font-family:var(--display);font-weight:400;font-size:clamp(28px,3.2vw,40px);line-height:1.12;margin:14px 0 10px}
+.teaser-title a{color:var(--ink);text-decoration:none}
+.teaser-title a:hover{color:var(--gold)}
+.teaser-sub{font-family:var(--display);font-style:italic;font-size:20px;color:var(--ink-2);margin:0 0 22px}
+.teaser-text{position:relative;max-height:250px;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,#000 45%,transparent 100%);mask-image:linear-gradient(to bottom,#000 45%,transparent 100%)}
+.teaser-text p{margin:0 0 14px;color:var(--ink-2)}
+.teaser-actions{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:center;margin-top:18px}
+.teaser-actions .small{color:var(--ink-3)}
+@media (max-width:880px){.letter-latest .teaser{grid-template-columns:1fr;gap:28px}}
+
 html{-webkit-text-size-adjust:100%}
 body{margin:0}
 .film video{pointer-events:none}
