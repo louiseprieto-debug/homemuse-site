@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quel archétype de maison êtes-vous ? | Home Muse</title>
+<meta name="description" content="Quinze questions, cinq minutes : découvrez votre archétype de maison et trois idées Feng Shui et home staging pour une maison qui vous ressemble.">
+<link rel="canonical" href="https://www.homemuse.fr/fr/quiz-archetype/">
+<link rel="alternate" hreflang="en" href="https://www.homemuse.fr/home-archetype-quiz/">
+<link rel="alternate" hreflang="fr" href="https://www.homemuse.fr/fr/quiz-archetype/">
+<link rel="alternate" hreflang="x-default" href="https://www.homemuse.fr/home-archetype-quiz/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Home Muse">
+<meta property="og:title" content="Quel archétype de maison êtes-vous ? | Home Muse">
+<meta property="og:description" content="Quinze questions, cinq minutes : découvrez votre archétype de maison et trois idées Feng Shui et home staging pour une maison qui vous ressemble.">
+<meta property="og:url" content="https://www.homemuse.fr/fr/quiz-archetype/">
+<meta property="og:image" content="https://www.homemuse.fr/home-archetype-quiz/img/SOL.jpg">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#FBF8F1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* VOICE occasion, hushed: a calm, editorial home-magazine quiz in Home Muse's own brand
+   IDEA a beautifully printed interiors-magazine questionnaire, one question per page
+   PICTURE the quiz card itself, framed by a Mediterranean arch that fills with the archetype's colour at the result
+   COLOUR Home Muse cream ground, navy ink, brass gold accent; each archetype has its element tone
+   TYPE Cormorant Garamond display + Jost text (from the Home Muse site)
+   LAYOUT one centred column up to 680px; header with wordmark and FR/EN switch; same order on phone */
+:root{color-scheme:light dark;--bg:light-dark(#F3EDE3,#1b1a17);--card:light-dark(#FBF8F1,#25231f);--ink:light-dark(#2b3328,#efe9df);--soft:light-dark(#5f6656,#b9b2a6);--gold:light-dark(#9c7a45,#d3ad6d);--line:light-dark(#e2d8c8,#3a362f);--blush:light-dark(#F2DFD3,#3b2f2a);--acc:#9c7a45}
+:root[data-theme=light]{color-scheme:light}
+:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:300 17px/1.6 Jost,"Helvetica Neue",Arial,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Cormorant Garamond",Georgia,serif;font-weight:500;line-height:1.05;letter-spacing:-.01em;margin:0;text-wrap:balance}
+header{display:flex;justify-content:space-between;align-items:center;padding:20px max(5vw,16px);max-width:1240px;margin:0 auto}
+.brand{font-family:"Cormorant Garamond",Georgia,serif;font-size:26px;font-weight:500}
+.lang{display:flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--card)}
+.lang button{border:0;background:none;color:var(--soft);font:500 14px Jost,sans-serif;padding:8px 14px;border-radius:999px;cursor:pointer;min-height:36px}
+.lang button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+main{padding:8px max(5vw,16px) 64px}
+.card{max-width:680px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:clamp(24px,5vw,56px)}
+.arch{display:block;width:120px;height:150px;margin:0 auto 24px}
+.center{text-align:center}
+.intro h1{font-size:clamp(38px,6vw,52px)}
+.lede{color:var(--soft);max-width:30em;margin:16px auto 28px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:12px 28px;border:0;border-radius:2px;background:var(--gold);color:#fff;font:500 16px Jost,sans-serif;cursor:pointer}
+.btn:hover{filter:brightness(1.06)}
+.btn:focus-visible,.opt:focus-visible,.lang button:focus-visible,.back:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.meta{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--soft);margin-bottom:10px}
+.bar{height:2px;background:var(--line);margin-bottom:32px}
+.bar i{display:block;height:100%;background:var(--gold);transition:width .4s ease}
+.q h2{font-size:clamp(28px,4.4vw,38px);margin-bottom:24px}
+.opts{display:grid;gap:10px}
+.opt{display:block;width:100%;text-align:left;min-height:52px;padding:14px 18px;border:1px solid var(--line);border-radius:2px;background:transparent;color:var(--ink);font:300 16px/1.45 Jost,sans-serif;cursor:pointer;transition:border-color .2s,background .2s}
+.opt:hover{border-color:var(--gold)}
+.opt[aria-pressed=true]{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.back{background:none;border:0;color:var(--soft);font:400 14px Jost,sans-serif;cursor:pointer;padding:8px 0;min-height:36px}
+.back[disabled]{visibility:hidden}
+form{display:grid;gap:16px;text-align:left;margin-top:8px}
+label{font-size:14px;color:var(--soft)}
+input[type=text],input[type=email]{width:100%;margin-top:6px;min-height:48px;padding:10px 14px;border:1px solid var(--line);border-radius:2px;background:var(--bg);color:var(--ink);font:400 16px Jost,sans-serif}
+.consent{display:flex;gap:10px;align-items:flex-start;color:var(--ink);font-size:15px}
+.consent input{width:20px;height:20px;margin-top:3px;accent-color:var(--gold);flex:none}
+.err{color:#b3412e;font-size:14px;min-height:1em;margin:0}
+.res .kicker{color:var(--gold);font-size:15px;margin-bottom:6px}
+.res h1{font-size:clamp(40px,7vw,60px)}
+.res .quote{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:clamp(22px,3.4vw,27px);color:var(--acc);margin:14px 0 4px}
+.res .second{color:var(--soft);margin:0 0 24px}
+.res p.portrait{text-align:left;margin:0 0 28px}
+.tips{text-align:left;border-top:1px solid var(--line);padding-top:24px;margin-bottom:32px}
+.tips h3{font-size:26px;margin-bottom:14px}
+.tips ol{margin:0;padding-left:1.3em;display:grid;gap:10px}
+.offer{background:var(--blush);padding:24px;border-radius:2px;text-align:left}
+.offer h3{font-size:26px;margin-bottom:6px}
+.offer p{margin:0 0 16px}
+.logo{display:block;width:min(300px,70%);height:auto;margin:0 auto 28px}
+:root[data-theme=dark] .logo{background:#FBF8F1;padding:18px 22px;border-radius:4px}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .logo{background:#FBF8F1;padding:18px 22px;border-radius:4px}}
+.brand{display:block;width:110px;height:auto}
+:root[data-theme=dark] .brand{background:#FBF8F1;padding:6px 8px;border-radius:3px}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .brand{background:#FBF8F1;padding:6px 8px;border-radius:3px}}
+.logo.sm{width:min(180px,50%)}
+.sw{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:8px 0 14px}
+.chip{display:grid;gap:2px;font-size:14px}
+.chip span{display:block;height:54px;border-radius:2px;border:1px solid var(--line)}
+.chip b{font-weight:400;margin-top:4px}
+.chip small{color:var(--soft);font-size:13px}
+.small{font-size:14px;color:var(--soft);margin-top:6px!important}
+@media(max-width:600px){.sw{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.hero{display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;border-radius:50% 50% 3px 3px/34% 34% 3px 3px;margin:0 0 28px}
+.done{color:var(--ink);font-weight:400}
+.btn[disabled]{opacity:.4;cursor:default}
+.hint{color:var(--gold);font-size:15px;margin:-12px 0 18px}
+.nextrow{margin-top:22px;text-align:right}
+.duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.box{text-align:left;border:1px solid var(--line);border-left:3px solid var(--acc);padding:16px 18px;border-radius:2px}
+.box h3{font-size:22px;margin-bottom:6px}
+.box p{margin:0}
+.pal,.sec{margin-bottom:12px}
+.res .tips{margin-top:28px}
+.offhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.price{font-family:"Cormorant Garamond",Georgia,serif;font-size:30px;font-weight:600;white-space:nowrap;color:var(--ink)}
+.offer ul{margin:0 0 16px;padding-left:1.2em;display:grid;gap:6px}
+.offer .note{font-size:15px;color:var(--soft)}
+@media(max-width:600px){.duo{grid-template-columns:minmax(0,1fr)}}
+.foot{text-align:center;color:var(--soft);font-size:13px;margin-top:20px}
+.fade{animation:fade .45s ease both}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.fade{animation:none}.bar i{transition:none}}
+@media(max-width:600px){body{font-size:16px}.arch{width:96px;height:120px}.offer{padding:18px}}
+</style>
+</head>
+<body>
+<header>
+  <a href="/fr/" aria-label="Home Muse"><img class="brand" id="hlogo" alt="Home Muse" width="120" height="78"></a>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" id="lang-fr" data-l="fr">FR</button>
+    <button type="button" id="lang-en" data-l="en">EN</button>
+  </div>
+</header>
+<main><div class="card" id="app" aria-live="polite"></div>
+<p class="foot" id="foot"></p></main>
+<script>
+{
+/* Results and full-guide requests are emailed to contact@homemuse.fr via FormSubmit, like the free-call quiz. */
+const ENDPOINT = 'https://formsubmit.co/ajax/contact@homemuse.fr';
+
+const A = {
+  REF:{c:'#7E95A3',fr:'Le Refuge',en:'The Sanctuary',q:{fr:'« Ma maison, c’est là où je me retrouve. »',en:'“My home is where I come back to myself.”'},
+    p:{fr:'Votre maison est l’endroit où vous vous ressourcez. Le calme, la lumière douce et l’ordre comptent plus pour vous que d’impressionner. Votre élément est l’Eau : le calme et la profondeur, à réchauffer pour que la sérénité ne devienne jamais froideur.',en:'Your home is where you recharge. Quiet, soft light and order matter more to you than impressing anyone. Your element is Water: stillness and depth, warmed up so that calm never turns cold.'},
+    s:{fr:'Une maison qui vous ressource vraiment : calme, ordonnée, douce.',en:'A home that truly restores you: quiet, ordered and soft.'},sh:{fr:'Le calme peut basculer dans la froideur : murs nus, rien de personnel, une maison qui apaise mais ne vous enveloppe pas.',en:'Calm can tip into cold: bare walls, nothing personal, a home that soothes but doesn’t hold you.'},pal:{fr:'Sable, lin, blanc cassé, pierre · lin, laine, bois clair, céramique',en:'Sand, linen, soft white, stone · linen, wool, pale wood, ceramics'},
+    sw:[['#D8C7AE','Sable','Sand'],['#E6DCCB','Lin','Linen'],['#F4F0E8','Blanc cassé','Soft white'],['#A9A295','Pierre','Stone']],
+    t:{fr:['Remplacez ce soir un plafonnier par une lampe à hauteur des yeux.','Dégagez entièrement une surface et gardez-la ainsi une semaine.','Ajoutez une matière naturelle agréable au toucher : lin, laine ou bois.'],en:['Tonight, swap one overhead light for a lamp at eye level.','Clear one surface completely and keep it that way for a week.','Add one natural texture you love to touch: linen, wool or wood.']}},
+  TAB:{c:'#C46A4A',fr:'La Table Ouverte',en:'The Gathering Place',q:{fr:'« Ma maison est plus heureuse quand elle est pleine. »',en:'“My home is happiest when it’s full.”'},
+    p:{fr:'Votre maison est plus heureuse quand elle est pleine. La table est son cœur et la porte est toujours ouverte. Votre élément est le Feu : chaleur, joie et partage, à équilibrer avec un coin calme pour récupérer après la fête.',en:'Your home is happiest when it’s full. The table is its heart and the door is always open. Your element is Fire: warmth, joy and connection, balanced with a quiet corner where you can recover after the party.'},
+    s:{fr:'Une maison chaleureuse et généreuse, dont on se souvient.',en:'A warm, generous home that people remember.'},sh:{fr:'Trop de Feu épuise : du bruit, du désordre après chaque soirée, nulle part où récupérer.',en:'Too much Fire burns out: noise, mess after every evening, nowhere to recover.'},pal:{fr:'Terracotta, safran, rouge profond · bois massif, lin lavable, céramique émaillée',en:'Terracotta, saffron, deep red · solid wood, washable linen, glazed ceramics'},
+    sw:[['#C46A4A','Terracotta','Terracotta'],['#E1A23B','Safran','Saffron'],['#8E2F2A','Rouge profond','Deep red'],['#EFE3D0','Lin chaud','Warm linen']],
+    t:{fr:['Gardez une entrée lumineuse et dégagée : c’est le premier accueil.','Placez les assises face à face, à distance de conversation.','Gardez un coin rien qu’à vous, à l’écart des réceptions.'],en:['Keep your entrance bright and clear: it’s the first welcome.','Arrange seats so they face each other, within easy talking distance.','Keep one corner just for you, away from the hosting.']}},
+  CAB:{c:'#A07A4F',fr:'Le Cabinet de Curiosités',en:'The Storyteller',q:{fr:'« Chaque objet chez moi a une histoire. »',en:'“Every object in my home has a story.”'},
+    p:{fr:'Chaque objet chez vous a une histoire. Votre maison a une âme : souvenirs de voyage, objets de famille, livres. Votre élément est la Terre, qui garde et ancre, à équilibrer avec le Métal, l’art de choisir, pour que vos trésors respirent.',en:'Every object in your home has a story. Your home has soul: travel finds, family pieces, books. Your element is Earth, which holds and grounds, balanced with Metal, the art of editing, so your treasures can breathe.'},
+    s:{fr:'Une maison qui a une âme, pleine de sens.',en:'A home with soul, full of meaning.'},sh:{fr:'Trop de Terre alourdit : piles, poussière, objets qu’on ne voit plus.',en:'Too much Earth grows heavy: piles, dust, objects nobody sees any more.'},pal:{fr:'Vert encre, bordeaux, vieil or, noyer · velours, laiton, bois ancien, livres',en:'Ink green, burgundy, old gold, walnut · velvet, brass, old wood, books'},
+    sw:[['#2F4A3F','Vert encre','Ink green'],['#6E2433','Bordeaux','Burgundy'],['#B08D3E','Vieil or','Old gold'],['#5C4030','Noyer','Walnut']],
+    t:{fr:['Regroupez les petits objets par trois sur un plateau plutôt que de les disperser.','Laissez un tiers de chaque étagère vide.','Rangez la moitié de votre collection et faites-la tourner au fil des saisons.'],en:['Group small objects in threes on a tray instead of spreading them out.','Leave a third of each shelf empty.','Store half your collection and rotate it with the seasons.']}},
+  GAL:{c:'#8E9196',fr:'La Galerie',en:'The Curator',q:{fr:'« Je préfère une belle chose à dix objets ordinaires. »',en:'“I’d rather have one beautiful thing than ten ordinary ones.”'},
+    p:{fr:'Vous préférez une belle chose à dix objets ordinaires. Vous remarquez les proportions, la lumière et l’architecture. Votre élément est le Métal : clarté et raffinement, à équilibrer avec du vivant et des textures douces pour que la beauté soit habitée.',en:'You’d rather have one beautiful thing than ten ordinary ones. You notice proportion, light and architecture. Your element is Metal: clarity and refinement, balanced with living things and soft textures so that beauty feels lived in.'},
+    s:{fr:'Une maison belle et pensée, avec un vrai regard.',en:'A beautiful, considered home with a real eye.'},sh:{fr:'Trop de Métal refroidit : un showroom où l’on n’ose pas s’asseoir.',en:'Too much Metal turns cold: a showroom nobody dares to sit in.'},pal:{fr:'Blanc, noir, gris et une couleur forte · travertin, chêne, bouclette, lin',en:'White, black, grey and one bold accent · travertine, oak, bouclé, linen'},
+    sw:[['#F7F6F3','Blanc','White'],['#1E1E1E','Noir','Black'],['#8E9196','Gris','Grey'],['#B5502F','Couleur forte','Bold accent']],
+    t:{fr:['Ajoutez une grande plante en bonne santé dans votre pièce principale.','Adoucissez un angle vif avec un plaid, un tapis ou une forme arrondie.','Éclairez votre œuvre préférée pour qu’elle rayonne le soir.'],en:['Add one large, healthy plant to your main room.','Soften one sharp corner with a throw, a rug or a rounded piece.','Light your favourite artwork so it glows in the evening.']}},
+  ATE:{c:'#6F8A5B',fr:'L’Atelier Libre',en:'The Free Spirit',q:{fr:'« Ma maison change en même temps que moi. »',en:'“My home changes as I change.”'},
+    p:{fr:'Votre maison change en même temps que vous. Couleurs, plantes, projets : elle déborde de vie. Votre élément est le Bois : croissance et créativité, à équilibrer avec de la structure pour que vos idées deviennent des œuvres terminées.',en:'Your home changes as you change. Colour, plants, projects: it’s full of life. Your element is Wood: growth and creativity, balanced with structure so your ideas have room to become finished work.'},
+    s:{fr:'Une maison vivante et créative, jamais ennuyeuse.',en:'A lively, creative home that is never boring.'},sh:{fr:'Trop de Bois disperse : projets inachevés, chaos, aucun endroit calme où se poser.',en:'Too much Wood scatters: unfinished projects, chaos, no calm place to land.'},pal:{fr:'Vos deux couleurs signature et des verts · rotin, plantes, bois peint, paniers',en:'Your two signature colours plus greens · rattan, plants, painted wood, baskets'},
+    sw:[['#8A9A6B','Vert sauge','Sage green'],['#4F7A4A','Vert feuille','Leaf green'],['#E07A5F','Corail','Coral'],['#D4A23A','Moutarde','Mustard']],
+    t:{fr:['Donnez une boîte ou un panier à chaque projet ; quand il est plein, terminez-en un.','Choisissez deux couleurs présentes dans chaque pièce pour relier votre mélange.','Gardez votre lit et votre canapé libres de tout travail pour avoir un endroit où vous poser.'],en:['Give each project one box or basket; when it’s full, finish something.','Pick two colours that appear in every room to tie your mix together.','Keep your bed and sofa free of work so you always have a place to land.']}},
+  NID:{c:'#C29A52',fr:'Le Nid',en:'The Nest',q:{fr:'« Ma maison rassemble ma famille. »',en:'“My home holds my family together.”'},
+    p:{fr:'Votre maison rassemble votre famille. Le confort, le pratique et le fait d’être ensemble passent en premier. Votre élément est la Terre : soin et stabilité, à équilibrer avec une énergie fraîche pour que la maison grandisse avec vous au lieu de vous peser.',en:'Your home holds your family together. Comfort, practicality and togetherness come first. Your element is Earth: care and stability, balanced with fresh energy so the home grows with you instead of weighing you down.'},
+    s:{fr:'Une maison chaleureuse et pratique où chacun se sent en sécurité.',en:'A warm, practical home where everyone feels safe.'},sh:{fr:'Le quotidien peut avaler la maison, jusqu’à ne plus laisser de place aux adultes.',en:'Daily life can swallow the home until there’s no space left for the adults.'},pal:{fr:'Verts tendres, miel, bois chaleureux · laine, bois massif, tissus lavables',en:'Soft greens, honey, warm wood · wool, solid wood, washable fabrics'},
+    sw:[['#A8B89A','Vert tendre','Soft green'],['#D7A64F','Miel','Honey'],['#9B6B43','Bois chaud','Warm wood'],['#F1E7D3','Crème','Cream']],
+    t:{fr:['Créez un coin d’arrivée près de la porte : un crochet et un panier par personne.','Faites chaque soir un rangement express de dix minutes, avec un panier par pièce.','Réservez-vous un fauteuil et une lampe, rien qu’à vous.'],en:['Set up a drop zone by the door: one hook and one basket per person.','Do a ten-minute reset each evening, with one basket per room.','Claim one chair and one lamp that are just for you.']}},
+  SOL:{c:'#D49A3A',fr:'La Maison Soleil',en:'The Sun Seeker',q:{fr:'« La plus belle pièce de ma maison est dehors. »',en:'“The best room in my house is outside.”'},
+    p:{fr:'La plus belle pièce de votre maison est dehors. Vous vivez pour la lumière, l’air et la vue. Votre élément est le Feu : soleil et énergie, à équilibrer avec l’Eau et la Terre pour que la maison reste calme et douillette en hiver aussi.',en:'The best room in your house is outside. You live for light, air and the view. Your element is Fire: sunshine and energy, balanced with Water and Earth so your home stays calm and cosy in winter too.'},
+    s:{fr:'Une maison lumineuse et énergisante, qui vit dedans comme dehors.',en:'A bright, energising home that lives inside and out.'},sh:{fr:'Trop de Feu surchauffe : éblouissement, agitation, une maison vide en hiver.',en:'Too much Fire overheats: glare, restlessness, a bare home in winter.'},pal:{fr:'Bleu mer, ocre, olive, chaux · terracotta, rotin, lin, pierre',en:'Sea blue, ochre, olive, limewash · terracotta, rattan, linen, stone'},
+    sw:[['#2F6E8E','Bleu mer','Sea blue'],['#C98B3C','Ocre','Ochre'],['#7A7F4A','Olive','Olive'],['#EFE8DA','Chaux','Limewash']],
+    t:{fr:['Traitez votre terrasse comme une pièce : un tapis, une lumière, un usage.','Utilisez les mêmes couleurs et matières dedans et dehors.','Préparez un jeu d’hiver de coussins et de plaids pour une maison chaleureuse dès octobre.'],en:['Treat your terrace as a room: a rug, a light and a purpose.','Use the same colours and materials inside and out.','Prepare a winter set of cushions and throws so your home feels warm from October.']}}
+};
+const K = ['REF','TAB','CAB','GAL','ATE','NID','SOL'];
+
+/* Each question: fr/en title, then 7 answers in the order of K */
+const Q = [
+ {fr:'Dimanche matin, à la maison, vous êtes…',en:'It’s Sunday morning at home. You’re…',a:[
+  ['Encore au lit avec un livre et un thé, téléphone éteint.','Still in bed with a book and a tea, phone off.'],
+  ['En train de dresser la table : des amis viennent déjeuner.','Setting the table: friends are coming for lunch.'],
+  ['À la brocante, à la recherche d’un objet qui a une histoire.','At the flea market, looking for something with a past.'],
+  ['En train de réarranger une étagère jusqu’à ce qu’elle soit parfaite.','Rearranging a shelf until it’s exactly right.'],
+  ['Au milieu d’un projet créatif étalé par terre.','Halfway through a creative project spread across the floor.'],
+  ['En train de faire des crêpes pendant que la maison se réveille.','Making pancakes while the house wakes up.'],
+  ['Déjà sur la terrasse, café à la main, visage au soleil.','Already on the terrace with a coffee, face to the sun.']]},
+ {fr:'Quand vous passez la porte, vous avez besoin de…',en:'When you walk through the door, you need…',m:2,a:[
+  ['Silence : enfin, le monde se tait.','Silence: the world finally goes quiet.'],
+  ['Chaleur : la maison est prête à recevoir.','Warmth: the house is ready for guests.'],
+  ['Mémoire : vos souvenirs tout autour de vous.','Memory: your stories all around you.'],
+  ['Harmonie : chaque chose pensée, à sa place.','Harmony: everything considered, in its place.'],
+  ['Liberté : pas de règles, juste vous.','Freedom: no rules, just you.'],
+  ['Présence : tout le monde est rentré.','Togetherness: everyone’s home.'],
+  ['Lumière : de l’air, comme en vacances.','Light: fresh air, like being on holiday.']]},
+ {fr:'Dans quelle pièce pourriez-vous passer une journée entière ?',en:'Which room could you spend a whole day in?',a:[
+  ['Une chambre aux tons lin, lumière douce à travers les rideaux.','A bedroom in linen tones, soft light through the curtains.'],
+  ['Une grande cuisine avec une longue table et des chaises dépareillées.','A big kitchen with a long table and mismatched chairs.'],
+  ['Une bibliothèque pleine à craquer et un vieux fauteuil en cuir.','A library with packed shelves and an old leather armchair.'],
+  ['Un salon lumineux, un canapé sculptural et une seule œuvre d’art.','A bright living room, one sculptural sofa and a single artwork.'],
+  ['Un atelier plein de plantes, de couleurs et de projets en cours.','A studio full of plants, colour and works in progress.'],
+  ['Un salon familial douillet, grand canapé et panier de plaids.','A cosy family room, a big sofa and a basket of blankets.'],
+  ['Une terrasse couverte avec un lit de jour et vue sur la mer.','A covered terrace with a daybed and a sea view.']]},
+ {fr:'Un ami passe sans prévenir. Votre première pensée ?',en:'A friend drops by unannounced. Your first thought?',a:[
+  ['« Oh non, ma soirée tranquille… »','“Oh no, my quiet evening…”'],
+  ['« Parfait, je mets la bouilloire et je prépare une assiette. »','“Perfect, I’ll put the kettle on and make a plate.”'],
+  ['« Viens voir ce que j’ai trouvé le week-end dernier ! »','“Come and see what I found last weekend!”'],
+  ['« Si seulement j’avais eu cinq minutes pour ranger. »','“If only I’d had five minutes to tidy up.”'],
+  ['« Attention à la peinture, elle est encore fraîche. »','“Mind the paint, it’s still wet.”'],
+  ['« Attention aux jouets, entre ! »','“Mind the toys, come on in!”'],
+  ['« On s’installe dehors ? »','“Shall we sit outside?”']]},
+ {fr:'En cas d’incendie, quel objet sauvez-vous en premier ?',en:'If there were a fire, which object would you save first?',a:[
+  ['Mon plaid préféré, celui qui m’apaise.','My favourite blanket, the one that calms me.'],
+  ['Mon grand plat, celui de tous les repas de fête.','My big serving dish, the one from every celebration.'],
+  ['Un souvenir rapporté de très loin.','A keepsake I brought back from far away.'],
+  ['L’œuvre d’art pour laquelle j’ai économisé.','The artwork I saved up for.'],
+  ['Mes carnets et mes outils.','My sketchbooks and my tools.'],
+  ['Les albums photo de la famille.','The family photo albums.'],
+  ['Mon olivier dans son grand pot.','My olive tree in its big pot.']]},
+ {fr:'Votre palette idéale ?',en:'Your ideal colour palette?',m:2,a:[
+  ['Sable, lin, blanc cassé, pierre.','Sand, linen, soft white, stone.'],
+  ['Terracotta, safran, rouge profond.','Terracotta, saffron, deep red.'],
+  ['Vert encre, bordeaux, vieil or, noyer.','Ink green, burgundy, old gold, walnut.'],
+  ['Blanc, noir, gris et une seule couleur forte.','White, black, grey and a single bold accent.'],
+  ['Toutes : ça change avec mon humeur.','All of them: it changes with my mood.'],
+  ['Verts tendres, miel, bois chaleureux.','Soft greens, honey, warm wood.'],
+  ['Bleu mer, ocre, olive, chaux.','Sea blue, ochre, olive, limewash.']]},
+ {fr:'Qu’y a-t-il en ce moment sur les surfaces de votre salon ?',en:'What’s on the surfaces of your living room right now?',m:2,a:[
+  ['Presque rien : les surfaces dégagées m’apaisent.','Almost nothing: clear surfaces calm me.'],
+  ['Ce qui a servi hier soir : bougies, verres, jeux de société.','Whatever we used last night: candles, glasses, board games.'],
+  ['Beaucoup de choses, et chacune compte.','Lots of things, and every one matters.'],
+  ['Quelques pièces choisies, placées avec soin.','A few chosen pieces, carefully placed.'],
+  ['Des projets, des plantes et des essais en cours.','Projects, plants and experiments in progress.'],
+  ['La vie de tous les jours : sacs, jouets, courrier.','Everyday life: bags, toys, post.'],
+  ['Coquillages, galets et trouvailles du dehors.','Shells, pebbles and finds from outside.']]},
+ {fr:'Votre week-end idéal ?',en:'Your ideal weekend?',m:2,a:[
+  ['Un spa ou une retraite, en solo ou à deux.','A spa or a retreat, alone or with one person.'],
+  ['Un long déjeuner qui se transforme en dîner.','A long lunch that turns into dinner.'],
+  ['Une vieille ville, des musées et des antiquaires.','An old town, museums and antique shops.'],
+  ['Une expo d’architecture et un hôtel design.','An architecture exhibition and a design hotel.'],
+  ['Un atelier pour apprendre quelque chose de nouveau.','A workshop to learn something new.'],
+  ['Tout le monde à la maison, sans programme.','Everyone at home, no plans.'],
+  ['Mer, bateau, soleil : dehors du matin au soir.','Sea, boat, sun: outdoors from morning to night.']]},
+ {fr:'Qu’est-ce qui vous frustre le plus chez vous aujourd’hui ?',en:'What frustrates you most about your home today?',a:[
+  ['Elle n’est jamais vraiment paisible.','It’s never truly peaceful.'],
+  ['Elle est trop petite pour recevoir tout le monde.','It’s too small to have everyone over.'],
+  ['Il n’y a plus de place pour mes trésors.','There’s no room left for my treasures.'],
+  ['Elle ne ressemble pas à ce que j’imagine.','It doesn’t look the way I picture it.'],
+  ['C’est le chaos, je ne termine jamais rien.','It’s chaos: I never finish anything.'],
+  ['Il n’y a aucun espace rien qu’à moi.','There’s no space that’s just mine.'],
+  ['L’hiver, je n’y vis pas vraiment.','In winter, I don’t really live in it.']]},
+ {fr:'Quand vous achetez quelque chose pour la maison, vous…',en:'When you buy something for your home, you…',a:[
+  ['Le choisissez au toucher : doux, naturel, apaisant.','Choose it by touch: soft, natural, soothing.'],
+  ['Pensez d’abord à ceux qui vont l’utiliser.','Think first of the people who’ll use it.'],
+  ['Avez besoin qu’il ait une histoire.','Need it to have a story.'],
+  ['Attendez la pièce parfaite, peu importe le temps.','Wait for the perfect piece, however long it takes.'],
+  ['Craquez sur le moment et trouvez une place après.','Fall for it on the spot and find a place later.'],
+  ['Vérifiez qu’il est pratique et solide.','Check it’s practical and will last.'],
+  ['Choisissez des matières naturelles qui vont aussi dehors.','Choose natural materials that can go outside too.']]},
+ {fr:'Votre lumière préférée ?',en:'Your favourite kind of light?',m:2,a:[
+  ['Une bougie et une lampe tamisée le soir.','A candle and a dimmed lamp in the evening.'],
+  ['Une suspension basse au-dessus d’une table bien remplie.','A low pendant over a full table.'],
+  ['De vieilles lampes aux abat-jour en tissu.','Old lamps with fabric shades.'],
+  ['Un spot sur un bel objet.','A spotlight on a beautiful object.'],
+  ['Celle que je viens de chiner ou de fabriquer moi-même.','Whichever one I’ve just found or made myself.'],
+  ['Une lampe chaude près du canapé pour l’histoire du soir.','A warm lamp by the sofa for the bedtime story.'],
+  ['Le plein soleil, fenêtres grandes ouvertes.','Full sun through wide-open windows.']]},
+ {fr:'À quelle fréquence changez-vous les choses chez vous ?',en:'How often do you change things around at home?',a:[
+  ['Rarement : j’aime que tout reste calme et stable.','Rarely: I like things to stay calm and steady.'],
+  ['Avant chaque réception.','Before every gathering.'],
+  ['Quand je trouve un nouveau trésor à placer.','When I find a new treasure that needs a place.'],
+  ['Seulement quand je trouve la bonne pièce.','Only when I find the right piece.'],
+  ['Tout le temps, je me lasse vite.','All the time: I get bored quickly.'],
+  ['Quand les besoins de la famille changent.','When the family’s needs change.'],
+  ['Au fil des saisons : une maison d’été, une maison d’hiver.','With the seasons: a summer home and a winter home.']]},
+ {fr:'Votre maison en un mot ?',en:'Your home in one word?',a:[
+  ['Cocon','Cocoon'],['Convivialité','Hospitality'],['Mémoire','Memory'],['Élégance','Elegance'],['Créativité','Creativity'],['Famille','Family'],['Lumière','Light']]},
+ {fr:'Qu’aimeriez-vous le plus que votre maison vous apporte ?',en:'What would you most like your home to give you?',a:[
+  ['Un vrai repos.','Real rest.'],['Des soirées inoubliables.','Unforgettable evenings.'],['Un sentiment d’ancrage.','A sense of roots.'],['De la beauté au quotidien.','Beauty every day.'],['De l’espace pour créer.','Room to create.'],['Un quotidien de famille plus simple.','Easier family life.'],['Un air de vacances toute l’année.','A holiday feeling all year round.']]},
+ {fr:'Quelle phrase vous ressemble le plus ?',en:'Which sentence sounds most like you?',w:2,a:K.map(k=>[A[k].q.fr,A[k].q.en])}
+];
+
+const T = {
+ fr:{kick:'Le quiz Home Muse',title:'Quel archétype de maison êtes-vous ?',lede:'Quinze questions, cinq minutes, et une meilleure idée de ce dont votre maison a besoin pour vous ressembler.',start:'Commencer le quiz',of:'sur',back:'← Retour',
+  formT:'Votre résultat est prêt !',formL:'Où pouvons-nous vous l’envoyer ?',name:'Prénom',mail:'E-mail',consent:'J’accepte de recevoir mon résultat et les e-mails de Home Muse. Désinscription possible à tout moment.',see:'Voir mon résultat',
+  eName:'Merci d’indiquer votre prénom.',eMail:'Merci d’indiquer une adresse e-mail valide.',eCons:'Merci de cocher la case pour recevoir votre résultat.',
+  you:'Votre archétype de maison',touch:'avec une touche de',tips:'Trois idées pour commencer',
+  hint:'Choisissez jusqu’à 2 réponses',next:'Suivant',
+  strT:'Votre force',mat:'Matières :',ateNote:'Exemple : choisissez vos deux couleurs signature et associez-les à des verts.',shT:'Votre part d’ombre',palT:'Vos couleurs et matières',secT:'Votre archétype secondaire',
+  offT:'Votre guide complet Home Muse',price:'19,99 €',offP:'Ces premières pistes ne sont qu’un début. Votre guide complet vous montre comment appliquer votre archétype chez vous, pièce par pièce :',
+  offL:['Votre portrait complet : vos forces, votre part d’ombre et ce dont votre maison a vraiment besoin','Votre élément Feng Shui expliqué : ses couleurs, ses formes et ses matières','5 conseils Feng Shui pour votre archétype, avec le pourquoi et une action à faire dès ce week-end','5 conseils de home staging et une check-list pièce par pièce','Une page sur votre archétype secondaire','Les erreurs à éviter pour votre archétype','Environ 12 à 15 pages, en français ou en anglais'],
+  offN:'Lou prépare et vous envoie votre guide personnellement par e-mail, avec le lien de paiement.',
+  offB:'Commander mon guide complet · 19,99 €',offD:'Merci ! Lou vous écrit très vite par e-mail avec votre lien de paiement et votre guide complet.',
+  again:'Refaire le quiz',foot:'Home Muse · Home staging et Feng Shui sur la Côte d’Azur'},
+ en:{kick:'The Home Muse quiz',title:'Which home archetype are you?',lede:'Fifteen questions, five minutes, and a clearer idea of what your home needs to feel like you.',start:'Start the quiz',of:'of',back:'← Back',
+  formT:'Your result is ready!',formL:'Where should we send it?',name:'First name',mail:'Email',consent:'I agree to receive my result and emails from Home Muse. I can unsubscribe at any time.',see:'See my result',
+  eName:'Please add your first name.',eMail:'Please add a valid email address.',eCons:'Please tick the box to receive your result.',
+  you:'Your home archetype',touch:'with a touch of',tips:'Three ideas to start with',
+  hint:'Choose up to 2 answers',next:'Next',
+  strT:'Your strength',mat:'Materials:',ateNote:'Example: pick your own two signature colours and pair them with greens.',shT:'Your shadow',palT:'Your colours and materials',secT:'Your secondary archetype',
+  offT:'Your full Home Muse guide',price:'€19.99',offP:'These first ideas are just the start. Your full guide shows you how to bring your archetype into your home, room by room:',
+  offL:['Your complete portrait: your strengths, your shadow and what your home really needs','Your Feng Shui element explained: its colours, shapes and materials','5 Feng Shui tips for your archetype, each with why it works and one thing to do this weekend','5 home staging tips and a room-by-room checklist','A page on your secondary archetype','The mistakes to avoid for your archetype','About 12–15 pages, in English or French'],
+  offN:'Lou prepares your guide and sends it to you personally by email, with the payment link.',
+  offB:'Order my full guide · €19.99',offD:'Thank you! Lou will email you very soon with your payment link and your full guide.',
+  again:'Take the quiz again',foot:'Home Muse · Home staging and Feng Shui on the Côte d’Azur'}
+};
+
+let lang = (document.documentElement.lang||'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+let view = 'intro', step = 0, picks = [], order = [], person = {name:'',email:''}, requested = false;
+const app = document.getElementById('app');
+const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const shuffle = n => { const a=[...Array(n).keys()]; for(let i=n-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const reset = () => { step=0; picks=Q.map(q=>q.m?[]:null); order=Q.map(q=>shuffle(q.a.length)); requested=false; };
+reset();
+
+const LOGO = '/home-archetype-quiz/img/logo.png';
+const PH = {REF:'/home-archetype-quiz/img/REF.jpg',TAB:'/home-archetype-quiz/img/TAB.jpg',CAB:'/home-archetype-quiz/img/CAB.jpg',GAL:'/home-archetype-quiz/img/GAL.jpg',ATE:'/home-archetype-quiz/img/ATE.jpg',NID:'/home-archetype-quiz/img/NID.jpg',SOL:'/home-archetype-quiz/img/SOL.jpg'};
+const arch = (fill, op) => `<svg class="arch" viewBox="0 0 120 150" aria-hidden="true">
+ <path d="M10 148V60a50 50 0 0 1 100 0v88z" fill="${fill}" fill-opacity="${op}"/>
+ <path d="M10 148V60a50 50 0 0 1 100 0v88" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1.2"/>
+ <path d="M22 148V62a38 38 0 0 1 76 0v86" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-width="1"/>
+ <circle cx="60" cy="52" r="12" fill="${fill}" fill-opacity="${Math.min(1,op+.35)}"/>
+ <path d="M10 148h100" stroke="currentColor" stroke-opacity=".35"/></svg>`;
+
+function score(){
+  const s = Object.fromEntries(K.map(k=>[k,0]));
+  picks.forEach((p,i)=>{ if(Array.isArray(p)) p.forEach(x=>{ s[K[x]] += 1; }); else if(p!==null) s[K[p]] += (Q[i].w||1); });
+  const tie = picks[Q.length-1];
+  const ranked = [...K].sort((a,b)=> s[b]-s[a] || (K[tie]===b) - (K[tie]===a) || K.indexOf(a)-K.indexOf(b));
+  return {s, main:ranked[0], second:ranked[1]};
+}
+
+function send(extra){
+  const r = score(), A1 = A[r.main], A2 = A[r.second];
+  const guide = !!extra.pdf_requested;
+  const data = {
+    'Prénom / First name': person.name, 'E-mail': person.email, 'Langue / Language': lang.toUpperCase(),
+    'Archétype principal': A1.fr+' / '+A1.en, 'Archétype secondaire': A2.fr+' / '+A2.en,
+    'Scores': K.map(k=>k+' '+r.s[k]).join(' · '), 'Guide complet 19,99 € demandé': guide ? 'OUI' : 'non',
+    'Consentement e-mails': 'oui', 'Date': new Date().toISOString().slice(0,10),
+    _subject: (guide ? 'Quiz Home Muse · DEMANDE DE GUIDE 19,99 € · ' : 'Quiz Home Muse · nouveau résultat · ')+person.name+' · '+A1.fr+' ('+lang.toUpperCase()+')',
+    _replyto: person.email, _template: 'table', _captcha: 'false'
+  };
+  try{
+    fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(data)}).catch(()=>{});
+    window.hmTrack && window.hmTrack('Lead',{content_name: guide ? 'Archetype quiz: full guide request' : 'Archetype quiz'});
+  }catch(e){}
+}
+
+function render(){
+  const t = T[lang];
+  document.documentElement.lang = lang;
+  ['fr','en'].forEach(l=>document.getElementById('lang-'+l).setAttribute('aria-pressed', String(l===lang)));
+  document.getElementById('foot').textContent = t.foot;
+  const hl=document.getElementById('hlogo'); if(!hl.src) hl.src=LOGO; hl.style.visibility = view==='intro' ? 'hidden' : 'visible';
+  document.documentElement.style.setProperty('--acc','var(--gold)');
+
+  if(view==='intro'){
+    app.innerHTML = `<div class="intro center fade"><img class="logo" src="${LOGO}" alt="Home Muse" width="720" height="465">
+      <p class="res"><span class="kicker">${t.kick}</span></p>
+      <h1>${t.title}</h1><p class="lede">${t.lede}</p>
+      <button class="btn" id="go">${t.start}</button></div>`;
+    document.getElementById('go').onclick = ()=>{ view='quiz'; render(); };
+  }
+  else if(view==='quiz'){
+    const q = Q[step], li = lang==='fr'?0:1;
+    app.innerHTML = `<div class="q fade">
+      <div class="meta"><button class="back" id="back" ${step===0?'disabled':''}>${t.back}</button><span>${step+1} ${t.of} ${Q.length}</span></div>
+      <div class="bar"><i style="width:${(step/Q.length)*100}%"></i></div>
+      <h2>${esc(q[lang])}</h2>${q.m?`<p class="hint">${t.hint}</p>`:''}
+      <div class="opts">${order[step].map(i=>`<button class="opt" data-i="${i}" aria-pressed="${q.m?picks[step].includes(i):picks[step]===i}">${esc(q.a[i][li])}</button>`).join('')}</div>
+      ${q.m?`<div class="nextrow"><button class="btn" id="nx" ${picks[step].length?'':'disabled'}>${t.next}</button></div>`:''}</div>`;
+    const advance=()=>{ if(step<Q.length-1){step++;} else {view='form';} render(); };
+    app.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+      const i=Number(b.dataset.i);
+      if(q.m){
+        const sel=picks[step], at=sel.indexOf(i);
+        if(at>-1) sel.splice(at,1); else { if(sel.length>=q.m) sel.shift(); sel.push(i); }
+        app.querySelectorAll('.opt').forEach(o=>o.setAttribute('aria-pressed',String(sel.includes(Number(o.dataset.i)))));
+        document.getElementById('nx').disabled=!sel.length;
+        if(sel.length>=q.m) setTimeout(advance,320);
+      } else {
+        picks[step]=i; b.setAttribute('aria-pressed','true'); setTimeout(advance,220);
+      }
+    });
+    const nx=document.getElementById('nx'); if(nx) nx.onclick=advance;
+    document.getElementById('back').onclick=()=>{ if(step>0){step--;render();} };
+  }
+  else if(view==='form'){
+    app.innerHTML = `<div class="center fade"><img class="logo sm" src="${LOGO}" alt="Home Muse">
+      <h2 style="font-size:clamp(32px,5vw,44px)">${t.formT}</h2><p class="lede" style="margin-bottom:12px">${t.formL}</p>
+      <form id="f" novalidate>
+        <label for="fn">${t.name}<input type="text" id="fn" autocomplete="given-name" value="${esc(person.name)}"></label>
+        <label for="em">${t.mail}<input type="email" id="em" autocomplete="email" value="${esc(person.email)}"></label>
+        <label class="consent" for="ok"><input type="checkbox" id="ok"><span>${t.consent}</span></label>
+        <p class="err" id="er" role="alert"></p>
+        <div><button class="btn" type="submit">${t.see}</button></div>
+        <button class="back" type="button" id="back">${t.back}</button>
+      </form></div>`;
+    document.getElementById('back').onclick=()=>{view='quiz';step=Q.length-1;render();};
+    document.getElementById('f').onsubmit=e=>{
+      e.preventDefault();
+      const n=document.getElementById('fn').value.trim(), m=document.getElementById('em').value.trim(), ok=document.getElementById('ok').checked, er=document.getElementById('er');
+      if(!n){er.textContent=t.eName;return;}
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)){er.textContent=t.eMail;return;}
+      if(!ok){er.textContent=t.eCons;return;}
+      person={name:n,email:m}; send({consent:true,pdf_requested:false}); view='result'; render(); window.scrollTo({top:0,behavior:'smooth'});
+    };
+  }
+  else {
+    const r=score(), a=A[r.main], b=A[r.second];
+    document.documentElement.style.setProperty('--acc',a.c);
+    app.innerHTML = `<div class="res center fade"><img class="hero" src="${PH[r.main]}" alt="${esc(a[lang])}" width="900" height="600">
+      <p class="kicker">${esc(person.name)}, ${t.you.charAt(0).toLowerCase()+t.you.slice(1)}</p>
+      <h1>${esc(a[lang])}</h1>
+      <p class="quote">${esc(a.q[lang])}</p>
+      <p class="second">${t.touch} ${esc(b[lang])}</p>
+      <p class="portrait">${esc(a.p[lang])}</p>
+      <div class="duo">
+        <div class="box"><h3>${t.strT}</h3><p>${esc(a.s[lang])}</p></div>
+        <div class="box"><h3>${t.shT}</h3><p>${esc(a.sh[lang])}</p></div>
+      </div>
+      <div class="box pal"><h3>${t.palT}</h3>
+        <div class="sw">${a.sw.map(s=>`<div class="chip"><span style="background:${s[0]}"></span><b>${esc(lang==='fr'?s[1]:s[2])}</b><small>${s[0]}</small></div>`).join('')}</div>
+        <p><strong>${t.mat}</strong> ${esc(a.pal[lang].split(' · ')[1]||'')}</p>${r.main==='ATE'?`<p class="small">${t.ateNote}</p>`:''}</div>
+      <div class="box sec"><h3>${t.secT}${lang==='fr'?' :':':'} ${esc(b[lang])}</h3><p>${esc(b.s[lang])} ${esc(b.q[lang])}</p></div>
+      <div class="tips"><h3>${t.tips}</h3><ol>${a.t[lang].map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>
+      <div class="offer"><div class="offhead"><h3>${t.offT}</h3><span class="price">${t.price}</span></div>
+        <p>${t.offP}</p>
+        <ul>${t.offL.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+        <p class="note">${t.offN}</p>
+        ${requested?`<p class="done">${t.offD}</p>`:`<button class="btn" id="req">${t.offB}</button>`}</div>
+      <p style="margin-top:24px"><button class="back" id="again">${t.again}</button></p></div>`;
+    const rq=document.getElementById('req');
+    if(rq) rq.onclick=()=>{ requested=true; send({consent:true,pdf_requested:true}); render(); };
+    document.getElementById('again').onclick=()=>{ reset(); view='intro'; render(); };
+  }
+}
+
+document.querySelectorAll('.lang button').forEach(b=>b.onclick=()=>{ lang=b.dataset.l; render(); });
+
+/* Preview links: #result-refuge, #result-table, #result-cabinet, #result-galerie, #result-atelier, #result-nid, #result-soleil */
+const PREV = {refuge:'REF',table:'TAB',cabinet:'CAB',galerie:'GAL',atelier:'ATE',nid:'NID',soleil:'SOL'};
+function preview(){
+  const m = /^#result-([a-z]+)$/.exec(location.hash||'');
+  if(!m || !PREV[m[1]]) return false;
+  const main = K.indexOf(PREV[m[1]]), second = (main+6)%7;
+  reset();
+  picks = Q.map((q,i)=> q.m ? [main] : (i===2 || i===8 ? second : main));
+  person = {name: lang==='fr' ? 'Marie' : 'Emma', email:'exemple@homemuse.fr'};
+  view = 'result';
+  return true;
+}
+window.addEventListener('hashchange',()=>{ if(preview()) render(); });
+preview();
+render();
+}
+</script>
+<script src="/assets/consent.js?v=2" defer></script>
+</body>
+</html>
