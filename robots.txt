@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /guide/
+Disallow: /clarity/
 
 Sitemap: https://www.homemuse.fr/sitemap.xml
