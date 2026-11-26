@@ -2,5 +2,6 @@ User-agent: *
 Allow: /
 Disallow: /guide/
 Disallow: /clarity/
+Disallow: /studio/
 
 Sitemap: https://www.homemuse.fr/sitemap.xml

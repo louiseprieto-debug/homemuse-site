@@ -1,0 +1,14 @@
+{
+  "name": "Home Muse Studio",
+  "short_name": "Studio",
+  "start_url": "/studio/",
+  "scope": "/studio/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F3EDE3",
+  "theme_color": "#F3EDE3",
+  "icons": [
+    { "src": "/studio/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/studio/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
