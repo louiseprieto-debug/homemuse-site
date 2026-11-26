@@ -2,6 +2,7 @@
    The pixel loads ONLY after the visitor clicks "Accept". The choice is remembered for 6 months.
    Tracked: PageView, Lead (newsletter / free guide links, quiz sent), Schedule (booking links). */
 (function () {
+  if (/[?&]studio=/.test(location.search)) return; /* inside Home Muse Studio: no banner, no pixel */
   var PIXEL = "1669159834859239", KEY = "hm_consent", MAX = 182 * 864e5;
   var FR = (document.documentElement.lang || "").indexOf("fr") === 0;
   var T = FR ? {
