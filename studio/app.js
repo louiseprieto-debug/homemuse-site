@@ -1,6 +1,6 @@
 /* Home Muse Studio: Lou's private iPad app for client visits.
    Local-first: every project lives in this iPad's IndexedDB and works offline.
-   When Supabase is connected (Settings), projects and photos sync to Lou's private cloud account.
+   When Google Drive is connected (Settings), projects, photos, drawings and answers sync to Lou's own Drive.
    The archetype quiz (/quiz/) and the onboarding questionnaire (/clarity/) open inside the app;
    their answers come back by postMessage and are saved to the project, then emailed via FormSubmit. */
 (function () {
@@ -10,6 +10,7 @@ const INBOX = 'contact@homemuse.fr';
 const ROOMS = ['Entrance', 'Living room', 'Kitchen', 'Dining room', 'Bedroom', 'Bathroom', 'Office', 'Kids’ room', 'Terrace', 'Garden', 'Other'];
 const STATUSES = ['Visit booked', 'Visited', 'Proposal sent', 'In progress', 'Done'];
 const SERVICES = ['Design audit', 'Home staging', 'Other services'];
+const ARCH = { REF: ['The Sanctuary', 'Le Refuge'], TAB: ['The Gathering Place', 'La Table Ouverte'], CAB: ['The Storyteller', 'Le Cabinet de Curiosités'], GAL: ['The Curator', 'La Galerie'], ATE: ['The Free Spirit', 'L’Atelier Libre'], NID: ['The Nest', 'Le Nid'], SOL: ['The Sun Seeker', 'La Maison Soleil'] };
 
 /* ---------- small helpers ---------- */
 const root = document.getElementById('root');
@@ -96,8 +97,12 @@ async function photoURL(p, ph, kind = 't') {
   const key = kind + ':' + ph.id;
   if (urlCache.has(key)) return urlCache.get(key);
   let blob = await DB.get('blobs', key);
-  if (!blob && ph.synced && Cloud.ready() && navigator.onLine) {
-    try { blob = await Cloud.download(`${Cloud.sess.uid}/${p.id}/${ph.id}${kind === 't' ? '_t' : ''}.jpg`); await DB.put('blobs', blob, key); } catch (e) { console.warn(e); }
+  if (!blob && ph.gid && G.ready() && navigator.onLine) {
+    try {
+      const full = await gGet(ph.gid); await DB.put('blobs', full, 'p:' + ph.id);
+      const u0 = URL.createObjectURL(full), th = await resize(await loadImage(u0), 520, 0.78); URL.revokeObjectURL(u0);
+      await DB.put('blobs', th.blob, 't:' + ph.id); blob = kind === 't' ? th.blob : full;
+    } catch (e) { console.warn(e); }
   }
   if (!blob && kind === 't') return photoURL(p, ph, 'p');
   if (!blob) return '';
@@ -118,7 +123,7 @@ async function addPhotos(p, files, room) {
     try {
       const img = await loadImage(u);
       const full = await resize(img, 2560, 0.85), th = await resize(img, 520, 0.78);
-      const ph = { id: sid(), room: room || 'Other', caption: '', w: full.w, h: full.h, at: Date.now(), synced: 0 };
+      const ph = { id: sid(), room: room || 'Other', caption: '', w: full.w, h: full.h, at: Date.now() };
       await DB.put('blobs', full.blob, 'p:' + ph.id); await DB.put('blobs', th.blob, 't:' + ph.id);
       p.photos.push(ph); n++;
     } catch (e) { toast('One photo could not be read (' + f.name + ')'); }
@@ -135,127 +140,329 @@ async function shareBlob(blob, name) {
 }
 const safeName = s => (s || 'home-muse').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'home-muse';
 
-/* ---------- Supabase (REST, no library) ---------- */
-const Cloud = {
-  get cfg() { return lsGet('hm-studio-cloud', {}); },
-  set cfg(v) { lsSet('hm-studio-cloud', v); },
-  get sess() { return lsGet('hm-studio-session', null); },
-  set sess(v) { lsSet('hm-studio-session', v); },
-  configured() { const c = this.cfg; return !!(c.url && c.key); },
-  ready() { return this.configured() && !!this.sess; },
-  async auth(body, grant) {
-    const c = this.cfg;
-    const r = await fetch(c.url + '/auth/v1/token?grant_type=' + grant, { method: 'POST', headers: { apikey: c.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error(j.error_description || j.msg || j.message || ('Sign-in failed (' + r.status + ')')); e.status = r.status; throw e; }
-    const s = { access: j.access_token, refresh: j.refresh_token, exp: Date.now() + (j.expires_in || 3600) * 1000, uid: j.user && j.user.id, email: j.user && j.user.email };
-    this.sess = s; return s;
+/* ---------- Google Drive (Lou's own Google account) ----------
+   Studio signs in with Google Identity Services and asks only for the "drive.file" permission:
+   it can see and change the files it creates itself, nothing else in Lou's Drive.
+   Layout in Drive:
+     Home Muse Studio/
+       Archetype quiz results   (Google Sheet, one row per result)
+       Onboarding answers       (Google Sheet, one row per questionnaire)
+       <Client> · <visit date>/
+         project.json                         (the whole project, used for sync)
+         Archetype & onboarding – <Client>    (Google Doc)
+         Photos/  Plans and drawings/         (JPEG and PNG files) */
+const SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
+const DRIVE = 'https://www.googleapis.com/drive/v3/files', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
+const FOLDER = 'application/vnd.google-apps.folder', GDOC = 'application/vnd.google-apps.document', GSHEET = 'application/vnd.google-apps.spreadsheet';
+class NeedAuth extends Error {}
+const G = {
+  get cid() { return lsGet('hm-studio-gcid', ''); },
+  set cid(v) { lsSet('hm-studio-gcid', v); tc = null; },
+  get tok() { return lsGet('hm-studio-gtok', null); },
+  set tok(v) { lsSet('hm-studio-gtok', v); },
+  get email() { return lsGet('hm-studio-gemail', ''); },
+  linked() { return !!(this.cid && lsGet('hm-studio-glinked', false)); },
+  ready() { const t = this.tok; return this.linked() && !!t && t.exp > Date.now() + 60000; },
+  token() { if (!this.ready()) throw new NeedAuth('Google sign-in expired'); return this.tok.access; },
+  unlink() { lsSet('hm-studio-glinked', false); this.tok = null; lsSet('hm-studio-gemail', ''); },
+  /* Load Google's script ahead of time, so a tap can open the sign-in window straight away (Safari blocks late pop-ups). */
+  prepare() {
+    if (!this.cid || tc) return;
+    if (window.google && google.accounts && google.accounts.oauth2) { mkClient(); return; }
+    if (document.getElementById('gis')) return;
+    const s = document.createElement('script'); s.id = 'gis'; s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => mkClient(); document.head.appendChild(s);
   },
-  signIn(email, password) { return this.auth({ email, password }, 'password'); },
-  async token() {
-    let s = this.sess; if (!s) throw new Error('Not signed in');
-    if (Date.now() > s.exp - 60000) {
-      try { s = await this.auth({ refresh_token: s.refresh }, 'refresh_token'); }
-      catch (e) { if (e.status === 400 || e.status === 401) { this.sess = null; syncErr = 'Signed out: please sign in again in Settings'; } throw e; }
-    }
-    return s.access;
-  },
-  async req(path, opt = {}) {
-    const c = this.cfg, t = await this.token();
-    const r = await fetch(c.url + path, Object.assign({}, opt, { headers: Object.assign({ apikey: c.key, Authorization: 'Bearer ' + t }, opt.headers || {}) }));
-    if (!r.ok) { const txt = await r.text().catch(() => ''); throw new Error(r.status + ' ' + txt.slice(0, 240)); }
-    return r;
-  },
-  upload(path, blob) { return this.req('/storage/v1/object/studio/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'true' }, body: blob }); },
-  async download(path) { return (await this.req('/storage/v1/object/authenticated/studio/' + path)).blob(); },
-  remove(paths) { return this.req('/storage/v1/object/studio', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: paths }) }); }
+  /* Must be called from a tap. */
+  connect() {
+    return new Promise((res, rej) => {
+      if (!tc) { this.prepare(); rej(new Error('Google is still loading. Tap again in a moment.')); return; }
+      pending = { res, rej };
+      tc.requestAccessToken({ prompt: lsGet('hm-studio-glinked', false) && !lsGet('hm-studio-gconsent', false) ? '' : 'consent', login_hint: this.email || undefined });
+    });
+  }
 };
+let tc = null, pending = null;
+function mkClient() {
+  if (!G.cid) return;
+  tc = google.accounts.oauth2.initTokenClient({
+    client_id: G.cid, scope: SCOPE,
+    callback: async r => {
+      const p = pending; pending = null;
+      if (r.error) { p && p.rej(new Error(r.error_description || r.error)); return; }
+      G.tok = { access: r.access_token, exp: Date.now() + (r.expires_in || 3600) * 1000 };
+      lsSet('hm-studio-glinked', true); lsSet('hm-studio-gconsent', false); syncErr = '';
+      if (r.scope && !/gmail\.send/.test(r.scope)) toast('Studio can sync, but can’t send guide emails: tick the Gmail box when Google asks.', 6000);
+      try { const a = await (await gfetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json(); lsSet('hm-studio-gemail', a.user.emailAddress); } catch (e) {}
+      p && p.res(); pill();
+    },
+    error_callback: e => { const p = pending; pending = null; p && p.rej(new Error(e.type === 'popup_closed' ? 'The Google window was closed' : (e.message || e.type))); }
+  });
+}
+async function reconnect() {
+  try { await G.connect(); toast('Google connected'); sync(); } catch (e) { toast(e.message, 4000); }
+}
+async function gfetch(url, opt = {}) {
+  const r = await fetch(url, Object.assign({}, opt, { headers: Object.assign({ Authorization: 'Bearer ' + G.token() }, opt.headers || {}) }));
+  if (r.status === 401) { G.tok = null; throw new NeedAuth('Google sign-in expired'); }
+  if (!r.ok) { const t = await r.text().catch(() => ''); const e = new Error(r.status + ' ' + t.slice(0, 200)); e.status = r.status; throw e; }
+  return r;
+}
+async function gList(q, fields = 'id,name,trashed,appProperties') {
+  const out = []; let pt = '';
+  do {
+    const j = await (await gfetch(`${DRIVE}?q=${encodeURIComponent(q)}&spaces=drive&pageSize=1000&fields=nextPageToken,files(${fields})${pt ? '&pageToken=' + pt : ''}`)).json();
+    out.push(...j.files); pt = j.nextPageToken;
+  } while (pt);
+  return out;
+}
+const gProps = (k, v) => `appProperties has { key='${k}' and value='${v}' }`;
+async function gFolder(name, parent, props) {
+  const r = await gfetch(DRIVE + '?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: FOLDER, parents: parent ? [parent] : undefined, appProperties: props }) });
+  return (await r.json()).id;
+}
+/* Create (no id) or replace (id) a file with metadata + content. convert: a Google type to convert into on creation. */
+async function gUpload({ id, name, parent, mime, blob, props, convert }) {
+  const meta = {}; if (name) meta.name = name; if (props) meta.appProperties = props;
+  if (!id) { if (parent) meta.parents = [parent]; if (convert) meta.mimeType = convert; }
+  const b = 'hm' + sid();
+  const body = new Blob([`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`, JSON.stringify(meta), `\r\n--${b}\r\nContent-Type: ${mime}\r\n\r\n`, blob, `\r\n--${b}--`]);
+  try {
+    const r = await gfetch(id ? `${UPLOAD}/${id}?uploadType=multipart&fields=id` : `${UPLOAD}?uploadType=multipart&fields=id`, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+    return (await r.json()).id;
+  } catch (e) { if (id && e.status === 404) return gUpload({ name, parent, mime, blob, props, convert }); throw e; } // removed in Drive: create again
+}
+async function gTrash(id) { try { await gfetch(`${DRIVE}/${id}?fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }); } catch (e) { if (e.status !== 404) throw e; } }
+async function gRename(id, name) { await gfetch(`${DRIVE}/${id}?fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); }
+const gGet = async id => (await gfetch(`${DRIVE}/${id}?alt=media`)).blob();
+async function gAlive(id) { if (!id) return false; try { const j = await (await gfetch(`${DRIVE}/${id}?fields=trashed`)).json(); return !j.trashed; } catch (e) { if (e.status === 404) return false; throw e; } }
+async function gRoot() {
+  let id = await DB.get('kv', 'groot');
+  if (id && await gAlive(id)) return id;
+  const f = (await gList(`${gProps('hm', 'root')} and trashed=false`))[0];
+  id = f ? f.id : await gFolder('Home Muse Studio', null, { hm: 'root' });
+  await DB.put('kv', id, 'groot'); return id;
+}
+const folderName = p => `${(p.client.name || 'Unnamed client').replace(/[\/\\]/g, '-')} · ${p.visit || ''}`.trim();
+const photoName = (p, ph) => `${ph.room}${ph.caption ? ' – ' + ph.caption.slice(0, 60).replace(/[\/\\]/g, '-') : ''} (${ph.id}).jpg`;
+async function ensureFolders(p, root) {
+  const d = p.drive = p.drive || {};
+  if (!d.folder || !await gAlive(d.folder)) {
+    d.folder = await gFolder(folderName(p), root, { hm: 'folder', pid: p.id });
+    d.photos = d.plans = d.json = d.doc = null; d.name = folderName(p);
+    (p.photos || []).forEach(ph => { delete ph.gid; delete ph.gname; }); (p.sheets || []).forEach(s => { delete s.gid; delete s.gat; }); p.docAt = 0;
+  }
+  if (d.name !== folderName(p)) { await gRename(d.folder, folderName(p)); d.name = folderName(p); }
+  if (!d.photos) d.photos = await gFolder('Photos', d.folder, { hm: 'sub', pid: p.id });
+  if (!d.plans) d.plans = await gFolder('Plans and drawings', d.folder, { hm: 'sub', pid: p.id });
+}
+function profileHTML(p) {
+  const q = p.quiz, c = p.clarity, e = esc;
+  return `<html><body><h1>${e(p.client.name || 'Client')}</h1>
+    <p>${e([p.client.email, p.client.phone, p.client.address].filter(Boolean).join(' · '))}<br>Visit: ${e(fmtDate(p.visit))}${p.service ? ' · ' + e(p.service) : ''}</p>
+    <h2>Home archetype</h2>${q ? `<p><b>${e(q.names.main.en)}</b> (${e(q.names.main.fr)}), with a touch of ${e(q.names.second.en)}</p>
+      ${q.quote ? `<p><i>${e(q.quote.en)}</i></p>` : ''}${q.portrait ? `<p>${e(q.portrait.en)}</p>` : ''}
+      ${q.strength ? `<p><b>Strength:</b> ${e(q.strength.en)}</p>` : ''}${q.shadow ? `<p><b>Shadow:</b> ${e(q.shadow.en)}</p>` : ''}
+      ${q.tips ? `<p><b>First ideas</b></p><ol>${q.tips.en.map(t => `<li>${e(t)}</li>`).join('')}</ol>` : ''}
+      ${q.swatches ? `<p><b>Colours:</b> ${q.swatches.map(s => e(s[2] + ' ' + s[0])).join(', ')}</p>` : ''}
+      <p>Taken ${e(fmtTime(q.at))}${q.guide ? ' · Full guide requested (€19.99)' : ''}</p>` : '<p>Not taken yet.</p>'}
+    <h2>Onboarding questionnaire</h2>${c ? `<p>Completed ${e(fmtTime(c.at))}</p>${c.review.map(s => `<h3>${e(s.s)}</h3>${s.f.map(f => `<p><b>${e(f.q)}</b><br>${e(f.a || '—').replace(/\n/g, '<br>')}</p>`).join('')}`).join('')}` : '<p>Not completed yet.</p>'}
+    </body></html>`;
+}
+/* Running Google Sheets: one row per archetype result / onboarding questionnaire. */
+async function logSheet(k, header, root) {
+  let id = await DB.get('kv', 'glog-' + k);
+  if (id) return id;
+  const f = (await gList(`${gProps('hm', 'log')} and ${gProps('k', k)} and trashed=false`))[0];
+  const csv = header.map(h => '"' + String(h).replace(/"/g, '""') + '"').join(',') + '\n';
+  id = f ? f.id : await gUpload({ name: k === 'quiz' ? 'Archetype quiz results' : 'Onboarding answers', parent: root, mime: 'text/csv', blob: new Blob([csv]), convert: GSHEET, props: { hm: 'log', k } });
+  await DB.put('kv', id, 'glog-' + k); return id;
+}
+async function appendRow(k, header, row, root) {
+  for (let tryNo = 0; tryNo < 2; tryNo++) {
+    const id = await logSheet(k, header, root);
+    try { await gfetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [row] }) }); return; }
+    catch (e) { if (e.status === 404 || e.status === 400) { await DB.del('kv', 'glog-' + k); continue; } throw e; }
+  }
+}
+function logRow(kind, p, data) {
+  const keys = Object.keys(data || {}).filter(k => k[0] !== '_' && k !== 'Source');
+  return { kind: 'sheet', k: kind, header: ['Saved', 'Studio project', ...keys], row: [new Date().toLocaleString('en-GB'), p.client.name || '', ...keys.map(k => String(data[k] == null ? '' : data[k]))] };
+}
+
+/* ---------- full archetype guides (PDF), emailed from Lou's Gmail ---------- */
+const guideKey = (k, l) => k + '-' + l;
+const guideMeta = () => lsGet('hm-studio-guides', {});
+const setGuideMeta = m => lsSet('hm-studio-guides', m);
+async function guidesFolder(root) {
+  let id = await DB.get('kv', 'gguides');
+  if (id && await gAlive(id)) return id;
+  const f = (await gList(`${gProps('hm', 'guides')} and trashed=false`))[0];
+  id = f ? f.id : await gFolder('Full archetype guides', root, { hm: 'guides' });
+  await DB.put('kv', id, 'gguides'); return id;
+}
+async function syncGuides(root) {
+  const meta = guideMeta(), folder = await guidesFolder(root);
+  for (const [k, m] of Object.entries(meta)) {
+    if (m.gid || m.removed) continue;
+    const b = await DB.get('blobs', 'guide:' + k); if (!b) continue;
+    m.gid = await gUpload({ name: m.name, parent: folder, mime: 'application/pdf', blob: b, props: { hm: 'guide', k } });
+    if (m.old) { await gTrash(m.old); delete m.old; }
+  }
+  for (const [k, m] of Object.entries(meta)) if (m.removed) { if (m.gid) await gTrash(m.gid); delete meta[k]; }
+  for (const f of await gList(`${gProps('hm', 'guide')} and trashed=false`, 'id,name,appProperties,modifiedTime')) {
+    const k = f.appProperties.k, m = meta[k];
+    if (m && m.gid === f.id) continue;
+    if (m && m.gid && m.gid !== f.id && (m.at || 0) > Date.parse(f.modifiedTime)) continue;
+    await DB.put('blobs', await gGet(f.id), 'guide:' + k);
+    meta[k] = { name: f.name, gid: f.id, at: Date.parse(f.modifiedTime) };
+  }
+  setGuideMeta(meta);
+}
+const b64 = s => btoa(unescape(encodeURIComponent(s)));
+const wrap76 = s => s.replace(/.{1,76}/g, '$&\r\n');
+const blobB64 = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(',')[1]); fr.readAsDataURL(b); });
+function guideEmail(g) {
+  const fr = g.lang === 'fr', a = ARCH[g.key] || ['', ''], name = fr ? a[1] : a[0], first = esc((g.name || '').split(' ')[0]);
+  const subject = fr ? `Votre guide Home Muse : ${name}` : `Your Home Muse guide: ${name}`;
+  const p = fr ? [`Bonjour ${first},`, `Merci pour ce moment passé ensemble chez vous. Comme promis, voici votre guide complet Home Muse pour votre archétype, <b>${esc(name)}</b>.`, `Vous y trouverez votre portrait complet, votre élément Feng Shui, vos couleurs et matières, et des idées concrètes pièce par pièce. Prenez le temps de le lire tranquillement : nous en reparlerons lors de nos prochaines étapes.`, `Belle découverte,`]
+    : [`Hello ${first},`, `Thank you for welcoming me into your home. As promised, here is your full Home Muse guide for your archetype, <b>${esc(name)}</b>.`, `Inside you’ll find your complete portrait, your Feng Shui element, your colours and materials, and practical ideas room by room. Take your time with it: we’ll talk it through as we take the next steps together.`, `Enjoy,`];
+  const html = `<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#2b3328;max-width:560px">${p.map(x => `<p>${x}</p>`).join('')}<p style="font-size:22px;font-style:italic;color:#9c7a45;margin:4px 0 0">Lou</p><p style="font-size:13px;color:#5f6656">Home Muse · homemuse.fr</p></div>`;
+  return { subject, html, file: `Home-Muse-${(fr ? a[1] : a[0]).replace(/[^\w]+/g, '-')}-${g.lang.toUpperCase()}.pdf` };
+}
+async function sendGuide(g, pdf) {
+  const e = guideEmail(g), bd = 'hmb' + sid();
+  const raw = [`To: ${g.to}`, `Subject: =?UTF-8?B?${b64(e.subject)}?=`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${bd}"`, '',
+    `--${bd}`, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', wrap76(b64(e.html)),
+    `--${bd}`, `Content-Type: application/pdf; name="${e.file}"`, `Content-Disposition: attachment; filename="${e.file}"`, 'Content-Transfer-Encoding: base64', '', wrap76(await blobB64(pdf)),
+    `--${bd}--`, ''].join('\r\n');
+  try { await gfetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', { method: 'POST', headers: { 'Content-Type': 'message/rfc822' }, body: raw }); }
+  catch (x) { if (x.status === 403) { lsSet('hm-studio-gconsent', true); G.tok = null; throw new Error('Reconnect Google and allow Studio to send emails'); } throw x; }
+}
+async function queueGuide(p, manual) {
+  const q = p.quiz; if (!q) return;
+  const to = q.email || p.client.email;
+  if (!to) { toast('Add the client’s email in the Client tab, then press “Send guide”.', 5000); p.guide = { state: 'noemail', at: Date.now() }; await save(p); return; }
+  for (const m of (await DB.all('outbox')).filter(x => x.kind === 'guide' && x.pid === p.id)) await DB.del('outbox', m.id);
+  const lang = q.lang || p.lang || 'fr';
+  await DB.put('outbox', { id: sid(), kind: 'guide', pid: p.id, key: q.main, lang, to, name: p.client.name || q.name || '', at: Date.now() });
+  p.guide = { state: 'queued', at: Date.now(), to, key: q.main, lang }; await save(p);
+  if (manual) toast('Guide email queued for ' + to);
+  syncSoon();
+}
+async function flushGuides() {
+  for (const g of (await DB.all('outbox')).filter(x => x.kind === 'guide')) {
+    const p = mem.get(g.pid); if (!p) { await DB.del('outbox', g.id); continue; }
+    const pdf = await DB.get('blobs', 'guide:' + guideKey(g.key, g.lang));
+    if (!pdf) { if (!p.guide || p.guide.state !== 'missing') { p.guide = Object.assign({}, p.guide, { state: 'missing' }); await save(p, true); } continue; }
+    await sendGuide(g, pdf);
+    await DB.del('outbox', g.id);
+    p.guide = { state: 'sent', at: Date.now(), to: g.to, key: g.key, lang: g.lang }; await save(p, true);
+    toast('Full guide emailed to ' + g.to);
+    if (cur === p) refreshTabs(p);
+  }
+}
 
 /* ---------- sync ---------- */
 let syncing = false, again = false, lastSync = lsGet('hm-studio-lastsync', 0), syncErr = '';
-const syncSoon = debounce(() => sync(), 3000);
+const syncSoon = debounce(() => sync(), 4000);
 async function sync(manual) {
-  if (!Cloud.ready() || !navigator.onLine) { pill(); if (manual) toast(Cloud.ready() ? 'You’re offline. Everything is saved on this iPad.' : 'Cloud sync is not set up yet (Settings).'); return; }
+  if (!G.linked() || !navigator.onLine) { pill(); if (manual) toast(G.linked() ? 'You’re offline. Everything is saved on this iPad.' : 'Google Drive is not connected yet (Settings).'); return; }
+  if (!G.ready()) { pill(); if (manual) await reconnect(); return; }
   if (syncing) { again = true; return; }
   syncing = true; syncErr = ''; pill();
   let pulled = false;
   try {
-    const me = Cloud.sess.uid;
-    /* 1. pull what changed in the cloud */
-    let cur = (await DB.get('kv', 'cursor')) || '1970-01-01T00:00:00Z';
-    for (;;) {
-      const rows = await (await Cloud.req(`/rest/v1/projects?select=id,data,deleted,synced_at&synced_at=gt.${encodeURIComponent(cur)}&order=synced_at.asc&limit=200`)).json();
-      for (const row of rows) {
-        const loc = mem.get(row.id), rd = row.data || {};
-        if (row.deleted) { if (loc) { await purgeLocal(loc); pulled = true; } }
-        else if (!loc || (rd.updatedAt || 0) > (loc.updatedAt || 0)) {
-          if (loc) { Object.keys(loc).forEach(k => delete loc[k]); Object.assign(loc, rd); } else mem.set(row.id, rd);
-          await DB.put('projects', mem.get(row.id)); pulled = true;
-        }
-        cur = row.synced_at;
+    const root = await gRoot();
+    /* 1. pull projects changed on another device */
+    const files = await gList(gProps('hm', 'project'));
+    const seen = new Set();
+    for (const f of files) {
+      const pid = f.appProperties.pid, u = +f.appProperties.u || 0, loc = mem.get(pid);
+      seen.add(pid);
+      if (f.trashed || f.appProperties.del === '1') { if (loc && !(loc._dirty && loc.updatedAt > u)) { await purgeLocal(loc); pulled = true; } continue; }
+      if (!loc || u > (loc.updatedAt || 0)) {
+        const rd = JSON.parse(await (await gGet(f.id)).text()); rd.drive = Object.assign(rd.drive || {}, { json: f.id }); delete rd._dirty;
+        if (loc) { Object.keys(loc).forEach(k => delete loc[k]); Object.assign(loc, rd); } else mem.set(pid, rd);
+        await DB.put('projects', mem.get(pid)); pulled = true;
       }
-      await DB.put('kv', cur, 'cursor');
-      if (rows.length < 200) break;
     }
-    /* 2. upload new photos, delete removed ones */
-    for (const p of [...mem.values()]) {
-      let touched = false;
-      for (const ph of p.photos || []) {
-        if (ph.synced || p.deleted) continue;
-        const full = await DB.get('blobs', 'p:' + ph.id), th = await DB.get('blobs', 't:' + ph.id);
-        if (!full) continue;
-        await Cloud.upload(`${me}/${p.id}/${ph.id}.jpg`, full);
-        if (th) await Cloud.upload(`${me}/${p.id}/${ph.id}_t.jpg`, th);
-        ph.synced = 1; touched = true;
-      }
-      if (p.trash && p.trash.length) { await Cloud.remove(p.trash.flatMap(id => [`${me}/${p.id}/${id}.jpg`, `${me}/${p.id}/${id}_t.jpg`])); p.trash = []; touched = true; }
-      if (touched) { p._dirty = 1; await DB.put('projects', p); }
-    }
-    /* 3. push changed projects */
+    for (const loc of [...mem.values()]) if (loc.drive && loc.drive.json && !seen.has(loc.id) && !loc._dirty) { await purgeLocal(loc); pulled = true; } // deleted in Drive
+    /* 2. push projects changed here: photos, drawings, client doc, then project.json */
     for (const p of [...mem.values()].filter(x => x._dirty)) {
-      const at = p.updatedAt;
-      await Cloud.req('/rest/v1/projects?on_conflict=id', { method: 'POST', headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify([{ id: p.id, data: clean(p), updated_at: new Date(at).toISOString(), deleted: !!p.deleted }]) });
-      if (p.deleted) await purgeLocal(p);
-      else if (p.updatedAt === at) { p._dirty = 0; await DB.put('projects', p); }
+      if (p.deleted) {
+        if (p.drive && p.drive.json) await gUpload({ id: p.drive.json, mime: 'application/json', blob: new Blob([JSON.stringify(clean(p))]), props: { hm: 'project', pid: p.id, u: String(p.updatedAt), del: '1' } });
+        if (p.drive && p.drive.folder) await gTrash(p.drive.folder);
+        await purgeLocal(p); continue;
+      }
+      await ensureFolders(p, root);
+      for (const ph of p.photos) {
+        if (!ph.gid) { const b = await DB.get('blobs', 'p:' + ph.id); if (!b) continue; ph.gid = await gUpload({ name: photoName(p, ph), parent: p.drive.photos, mime: 'image/jpeg', blob: b, props: { hm: 'photo', pid: p.id } }); ph.gname = photoName(p, ph); }
+        else if (ph.gname !== photoName(p, ph)) { await gRename(ph.gid, photoName(p, ph)).catch(() => {}); ph.gname = photoName(p, ph); }
+      }
+      for (const s of p.sheets) {
+        if (s.gid && (s.gat || 0) >= s.updatedAt) continue;
+        if (!s.items.length && !s.gid) continue;
+        let img = null;
+        if (s.bg === 'photo') { const ph = p.photos.find(x => x.id === s.photoId), u = ph && await photoURL(p, ph, 'p'); if (!u) continue; img = await loadImage(u); }
+        const blob = await D.exportBlob(s, img, (p.client.name ? p.client.name + ' · ' : '') + (s.name || ''));
+        s.gid = await gUpload({ id: s.gid, name: (s.name || 'Drawing').replace(/[\/\\]/g, '-') + (s.bg === 'photo' ? '.jpg' : '.png'), parent: p.drive.plans, mime: blob.type, blob, props: { hm: 'sheet', pid: p.id } });
+        s.gat = s.updatedAt;
+      }
+      const docDue = Math.max(p.quiz ? p.quiz.at : 0, p.clarity ? p.clarity.at : 0);
+      if (docDue && (p.docAt || 0) < docDue) {
+        p.drive.doc = await gUpload({ id: p.drive.doc, name: 'Archetype & onboarding – ' + (p.client.name || 'client'), parent: p.drive.folder, mime: 'text/html', blob: new Blob([profileHTML(p)], { type: 'text/html' }), convert: GDOC, props: { hm: 'doc', pid: p.id } });
+        p.docAt = Date.now();
+      }
+      for (const gid of p.trash || []) if (typeof gid === 'string' && gid.length > 15) await gTrash(gid);
+      p.trash = [];
+      p.updatedAt = Math.max(Date.now(), p.updatedAt + 1); const at = p.updatedAt;
+      p.drive.json = await gUpload({ id: p.drive.json, name: 'project.json', parent: p.drive.folder, mime: 'application/json', blob: new Blob([JSON.stringify(clean(p))]), props: { hm: 'project', pid: p.id, u: String(at) } });
+      if (p.updatedAt === at) p._dirty = 0;
+      await DB.put('projects', p);
     }
+    /* 3. rows waiting for the Google Sheets */
+    for (const m of (await DB.all('outbox')).filter(x => x.kind === 'sheet').sort((a, b) => a.at - b.at)) { await appendRow(m.k, m.header, m.row, root); await DB.del('outbox', m.id); }
+    /* 4. guide PDFs, then guide emails waiting to go */
+    await syncGuides(root);
+    await flushGuides();
     lastSync = Date.now(); lsSet('hm-studio-lastsync', lastSync);
   } catch (e) {
     console.warn('sync', e);
-    syncErr = syncErr || (/Failed to fetch|NetworkError|Load failed/i.test(e.message) ? 'Could not reach the cloud' : 'Sync problem: ' + e.message.slice(0, 120));
+    syncErr = e instanceof NeedAuth ? '' : /Failed to fetch|NetworkError|Load failed/i.test(e.message) ? 'Could not reach Google' : 'Sync problem: ' + e.message.slice(0, 140);
   }
   syncing = false; pill();
   flushOutbox();
   if (pulled) onRemoteChange();
   if (again) { again = false; sync(); }
-  if (manual) toast(syncErr || 'All synced');
+  if (manual) toast(syncErr || (G.ready() ? 'All synced to Google Drive' : 'Tap the sync button to reconnect Google'));
 }
 function onRemoteChange() {
   const h = location.hash;
-  if (!h || h === '#/' || h === '#') route();
+  if (!h || h === '#/' || h === '#') return route();
   const typing = document.activeElement && document.activeElement.matches('input,textarea,select');
   if (/^#\/p\/[^/]+(\/(overview|plans|photos))?$/.test(h) && !typing && !document.querySelector('.ed,.lb,dialog[open]')) route();
 }
 function pillState() {
   if (syncing) return ['busy', 'Syncing…'];
-  if (!Cloud.configured()) return ['', 'On this iPad'];
-  if (!Cloud.ready()) return ['err', 'Sign in to sync'];
+  if (!G.linked()) return ['', 'On this iPad'];
   if (!navigator.onLine) return ['', 'Offline · saved on iPad'];
+  if (!G.ready()) return ['err', 'Tap to reconnect Google'];
   if (syncErr) return ['err', 'Sync problem'];
-  const dirty = [...mem.values()].some(p => p._dirty);
-  if (dirty) return ['busy', 'Waiting to sync'];
+  if ([...mem.values()].some(p => p._dirty)) return ['busy', 'Waiting to sync'];
   return ['ok', lastSync ? 'Synced ' + new Date(lastSync).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'Synced'];
 }
 function pill() { document.querySelectorAll('.sync').forEach(el => { const [s, t] = pillState(); el.dataset.s = s; el.querySelector('span').textContent = t; el.title = syncErr || t; }); }
-const pillHTML = () => `<button class="sync" data-go="settings" aria-label="Sync status"><i></i><span></span></button>`;
+const pillHTML = () => `<button class="sync" data-sync aria-label="Sync status"><i></i><span></span></button>`;
 
 /* ---------- email outbox (FormSubmit, same as the website) ---------- */
-async function queueEmail(payload) { await DB.put('outbox', { id: sid(), payload, at: Date.now() }); flushOutbox(); }
+async function queueEmail(payload) { await DB.put('outbox', { id: sid(), kind: 'email', payload, at: Date.now() }); flushOutbox(); }
+async function queueRow(r) { await DB.put('outbox', Object.assign({ id: sid(), at: Date.now() }, r)); syncSoon(); }
 let flushing = false;
 async function flushOutbox() {
   if (flushing || !navigator.onLine) return; flushing = true;
   try {
-    for (const m of await DB.all('outbox')) {
+    for (const m of (await DB.all('outbox')).filter(x => x.kind !== 'sheet' && x.kind !== 'guide')) {
       try {
         const r = await fetch('https://formsubmit.co/ajax/' + INBOX, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(m.payload) });
         const j = await r.json().catch(() => ({}));
@@ -275,8 +482,9 @@ window.addEventListener('message', async e => {
     p.quiz = Object.assign({}, d.result, { at: Date.now() });
     fill('name', d.result.name); fill('email', d.result.email);
     await save(p);
-    if (d.email) queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email));
+    if (d.email) { queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email)); queueRow(logRow('quiz', p, d.email)); }
     toast('Archetype saved to ' + (p.client.name || 'the project') + ': ' + d.result.names.main.en);
+    if (p.guidePaid && (!p.guide || p.guide.key !== d.result.main || p.guide.state !== 'sent')) queueGuide(p);
     refreshTabs(p);
   } else if (d.kind === 'clarity-draft') {
     p.clarityDraft = { answers: d.answers, review: d.review, lang: d.lang, at: Date.now() };
@@ -286,7 +494,7 @@ window.addEventListener('message', async e => {
     p.clarityDraft = null;
     fill('name', d.answers.name); fill('email', d.answers.email); fill('phone', d.answers.phone);
     await save(p);
-    if (d.email) queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email));
+    if (d.email) { queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email)); queueRow(logRow('onboarding', p, d.email)); }
     toast('Onboarding answers saved to the project');
     refreshTabs(p);
   }
@@ -304,7 +512,10 @@ function top({ back, title, kick }) {
     ${back ? '' : `<a class="iconbtn" href="#/settings" aria-label="Settings">${I.gear}</a>`}
   </header>`;
 }
-function bindCommon() { root.querySelectorAll('[data-go=settings]').forEach(b => b.onclick = () => { location.hash = '#/settings'; }); pill(); }
+function bindCommon() {
+  root.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => { if (G.linked() && !G.ready() && navigator.onLine) reconnect(); else if (G.linked()) sync(true); else location.hash = '#/settings'; });
+  pill();
+}
 
 /* ---------- home ---------- */
 function home(q = '') {
@@ -385,6 +596,7 @@ function overview(p, pane) {
       <div class="row"><label class="f">Visit date<input type="date" data-k="visit" value="${esc(p.visit)}"></label>
       <label class="f">Status<select data-k="status">${STATUSES.map(s => `<option${s === p.status ? ' selected' : ''}>${s}</option>`).join('')}</select></label></div>
       <div class="f" style="margin-bottom:14px"><span class="small muted">Service</span><div class="chips" style="margin-top:6px">${SERVICES.map(s => `<button class="chip" data-svc="${esc(s)}" aria-pressed="${p.service === s}">${s}</button>`).join('')}</div></div>
+      <label style="display:flex;gap:10px;align-items:center;margin-bottom:16px"><input type="checkbox" id="paid" ${p.guidePaid ? 'checked' : ''} style="width:22px;height:22px;flex:none"><span>Full archetype guide included (already paid)<br><span class="small muted">The quiz won’t show the €19.99 offer, and the guide PDF is emailed to the client from your Gmail as soon as they finish.</span></span></label>
       <div class="f" style="margin-bottom:14px"><span class="small muted">Client’s language (for the quiz and questionnaire)</span><div class="chips" style="margin-top:6px"><button class="chip" data-lang="fr" aria-pressed="${p.lang === 'fr'}">Français</button><button class="chip" data-lang="en" aria-pressed="${p.lang === 'en'}">English</button></div></div>
       <label class="f">The project in a few words<textarea data-k="brief" placeholder="What they want, rooms concerned, budget, timing…" style="min-height:90px">${esc(p.brief)}</textarea></label>
     </section>
@@ -396,6 +608,8 @@ function overview(p, pane) {
           ${q.quote ? `<p class="q">${esc(q.quote.en)}</p>` : ''}
           ${q.swatches ? `<div class="sw">${q.swatches.map(s => `<span style="background:${esc(s[0])}" title="${esc(s[2])}"></span>`).join('')}</div>` : ''}
           <p class="small muted" style="margin:8px 0 0">Taken ${esc(fmtTime(q.at))}${q.guide ? ' · <b style="color:var(--gold-ink)">Full guide requested (€19.99)</b>' : ''}</p></div></div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between">
+            <span class="small">${guideLine(p)}</span><button class="btn ghost sm" id="sendguide">${I.share} ${p.guide && p.guide.state === 'sent' ? 'Send again' : 'Send full guide'}</button></div>
           ${q.tips ? `<details style="margin-top:12px"><summary>Portrait, strength and first ideas</summary><p>${esc(q.portrait && q.portrait.en)}</p><p><b>Strength:</b> ${esc(q.strength && q.strength.en)}</p><p><b>Shadow:</b> ${esc(q.shadow && q.shadow.en)}</p><ol>${(q.tips.en || []).map(t => `<li>${esc(t)}</li>`).join('')}</ol></details>` : ''}`
         : `<p class="muted" style="margin:0">Not taken yet. Hand the iPad to your client: it takes five minutes, and the result is saved here.</p>`}
       </section>
@@ -418,13 +632,29 @@ function overview(p, pane) {
   pane.querySelectorAll('[data-k]').forEach(i => i.oninput = i.onchange = () => { p[i.dataset.k] = i.value; if (i.dataset.k === 'visit') root.querySelector('.top .kick').textContent = fmtDate(i.value); saveSoon(p); });
   pane.querySelectorAll('[data-svc]').forEach(b => b.onclick = () => { p.service = p.service === b.dataset.svc ? '' : b.dataset.svc; pane.querySelectorAll('[data-svc]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.svc === p.service))); save(p); });
   pane.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { p.lang = b.dataset.lang; pane.querySelectorAll('[data-lang]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.lang === p.lang))); save(p); });
+  document.getElementById('paid').onchange = e => { p.guidePaid = e.target.checked; save(p); };
+  const sg = document.getElementById('sendguide');
+  if (sg) sg.onclick = async () => {
+    const a = ARCH[p.quiz.main] || ['', ''], lang = p.quiz.lang || p.lang || 'fr', to = p.quiz.email || p.client.email;
+    if (!await dialog({ title: 'Email the full guide?', text: `${lang === 'fr' ? a[1] : a[0]} (${lang.toUpperCase()}) will be sent from your Gmail to ${to || 'the client'}.`, ok: 'Send' })) return;
+    await queueGuide(p, true); overview(p, pane);
+  };
   document.getElementById('delp').onclick = async () => {
-    if (!await confirmBox('Delete this project?', `Everything for ${p.client.name || 'this client'} goes: notes, plans, photos and answers${Cloud.ready() ? ', on this iPad and in the cloud' : ''}. This can’t be undone.`)) return;
-    p.deleted = 1; p.trash = (p.trash || []).concat(p.photos.filter(x => x.synced).map(x => x.id));
-    if (Cloud.configured()) { await save(p); for (const ph of p.photos) { await DB.del('blobs', 'p:' + ph.id); await DB.del('blobs', 't:' + ph.id); } }
+    if (!await confirmBox('Delete this project?', `Everything for ${p.client.name || 'this client'} goes: notes, plans, photos and answers${G.linked() ? ' on this iPad, and its Google Drive folder goes to the Drive bin. The Google Sheet rows and emails are kept' : ''}.`)) return;
+    p.deleted = 1;
+    if (G.linked() && p.drive && p.drive.json) { await save(p); for (const ph of p.photos) { await DB.del('blobs', 'p:' + ph.id); await DB.del('blobs', 't:' + ph.id); } }
     else await purgeLocal(p);
     toast('Project deleted'); location.hash = '#/';
   };
+}
+function guideLine(p) {
+  const g = p.guide, a = p.quiz && ARCH[p.quiz.main], lang = (p.quiz && p.quiz.lang) || p.lang || 'fr';
+  const has = p.quiz && guideMeta()[guideKey(p.quiz.main, lang)];
+  if (g && g.state === 'sent') return `<span class="okline">Full guide emailed to ${esc(g.to)}</span> · ${esc(fmtTime(g.at))}`;
+  if (g && g.state === 'noemail') return '<span style="color:var(--danger)">Add the client’s email to send the guide</span>';
+  if (!has) return `<span style="color:var(--danger)">The guide for ${esc(a ? (lang === 'fr' ? a[1] : a[0]) : '')} (${lang.toUpperCase()}) isn’t in Studio yet</span> · add it in Settings${g && g.state ? ', the email will go out then' : ''}`;
+  if (g && (g.state === 'queued' || g.state === 'missing')) return G.linked() ? 'Guide email waiting to send' + (G.ready() ? '…' : ': tap the sync button to reconnect Google') : 'Connect Google Drive in Settings to send the guide';
+  return p.guidePaid ? 'Guide included: it will be emailed automatically' : 'Full guide not sent';
 }
 function reviewHTML(r, collapsed) {
   if (!r) return '';
@@ -437,6 +667,7 @@ function embed(p, pane, tab) {
   const quiz = tab === 'archetype';
   const prm = new URLSearchParams({ studio: p.id, lang: p.lang || 'fr', name: quiz ? (p.client.name || '').split(' ')[0] : (p.client.name || ''), email: p.client.email || '' });
   if (!quiz && p.client.phone) prm.set('phone', p.client.phone);
+  if (quiz && p.guidePaid) prm.set('paid', '1');
   if (!quiz) { const a = (p.clarity || p.clarityDraft || {}).answers; lsSet('hm-studio-clarity-' + p.id, a ? { A: a, lang: (p.clarity || p.clarityDraft).lang || p.lang } : null); }
   const src = (quiz ? '/quiz/?' : '/clarity/?') + prm.toString();
   const who = esc((p.client.name || 'your client').split(' ')[0]);
@@ -512,7 +743,7 @@ function bindSheetCards(p, pane, rerender) {
     const s = p.sheets.find(x => x.id === el.dataset.s); if (!s) return;
     el.onclick = e => { if (e.target.closest('[data-del]')) return; openSheet(p, s, rerender); };
     el.onkeydown = e => { if (e.key === 'Enter') openSheet(p, s, rerender); };
-    el.querySelector('[data-del]').onclick = async () => { if (!await confirmBox('Delete “' + (s.name || 'this drawing') + '”?', 'The drawing will be removed from the project.')) return; p.sheets = p.sheets.filter(x => x !== s); await save(p); rerender(); refreshTabs(p); };
+    el.querySelector('[data-del]').onclick = async () => { if (!await confirmBox('Delete “' + (s.name || 'this drawing') + '”?', 'The drawing will be removed from the project.')) return; p.sheets = p.sheets.filter(x => x !== s); if (s.gid) p.trash = (p.trash || []).concat(s.gid); await save(p); rerender(); refreshTabs(p); };
     sheetThumb(p, s).then(u => { const im = el.querySelector('img'); if (im && u) im.src = u; });
   });
 }
@@ -559,9 +790,9 @@ function photos(p, pane) {
         <label class="btn ghost" style="cursor:pointer">${I.camera} Take photo<input type="file" accept="image/*" capture="environment" hidden id="cam"></label>
         <label class="btn" style="cursor:pointer">${I.plus} Add photos<input type="file" accept="image/*" multiple hidden id="lib"></label>
       </div></div>
-    <div class="drop" id="drop" ${p.photos.length ? 'hidden' : ''}><p style="margin:0">Choose a room, then take photos or add them from your library. They’re saved in this project${Cloud.ready() ? ' and backed up to your cloud' : ''}.</p></div>
+    <div class="drop" id="drop" ${p.photos.length ? 'hidden' : ''}><p style="margin:0">Choose a room, then take photos or add them from your library. They’re saved in this project${G.linked() ? ' and in its Google Drive folder' : ''}.</p></div>
     ${marks.length ? `<div class="roomhead">Drawn on<span>${marks.length}</span></div><div class="sheets">${sheetCards(marks)}</div>` : ''}
-    ${rooms.map(r => { const l = p.photos.filter(x => x.room === r); return `<div class="roomhead">${esc(r)}<span>${l.length}</span></div><div class="photos">${l.map(ph => `<button class="ph" data-ph="${ph.id}" aria-label="${esc(ph.caption || r)}"><img alt="" data-img="${ph.id}">${ph.caption ? `<span class="cap">${esc(ph.caption)}</span>` : ''}${ph.synced ? `<span class="cloud" title="Backed up">${I.cloud}</span>` : ''}</button>`).join('')}</div>`; }).join('')}
+    ${rooms.map(r => { const l = p.photos.filter(x => x.room === r); return `<div class="roomhead">${esc(r)}<span>${l.length}</span></div><div class="photos">${l.map(ph => `<button class="ph" data-ph="${ph.id}" aria-label="${esc(ph.caption || r)}"><img alt="" data-img="${ph.id}">${ph.caption ? `<span class="cap">${esc(ph.caption)}</span>` : ''}${ph.gid ? `<span class="cloud" title="In Google Drive">${I.cloud}</span>` : ''}</button>`).join('')}</div>`; }).join('')}
   </main>`;
   const sel = document.getElementById('room');
   sel.onchange = async () => {
@@ -613,7 +844,7 @@ function lightbox(p, list, i, rerender) {
     if (a.dataset.a === 'share') { const b = await DB.get('blobs', 'p:' + ph.id) || await fetch(await photoURL(p, ph, 'p')).then(r => r.blob()); shareBlob(b, safeName((p.client.name || '') + ' ' + ph.room) + '.jpg'); }
     if (a.dataset.a === 'del') {
       if (!await confirmBox('Delete this photo?', 'It will be removed from the project.')) return;
-      p.photos = p.photos.filter(x => x !== ph); if (ph.synced) p.trash = (p.trash || []).concat(ph.id);
+      p.photos = p.photos.filter(x => x !== ph); if (ph.gid) p.trash = (p.trash || []).concat(ph.gid);
       await DB.del('blobs', 'p:' + ph.id); await DB.del('blobs', 't:' + ph.id); urlCache.delete('p:' + ph.id); urlCache.delete('t:' + ph.id);
       list.splice(i, 1); dirty = true; refreshTabs(p); if (!list.length) close(); else go(0);
     }
@@ -627,63 +858,34 @@ function lightbox(p, list, i, rerender) {
 }
 
 /* ---------- settings ---------- */
-const SQL = `-- Home Muse Studio: run once in Supabase > SQL Editor
-create table if not exists public.projects (
-  id uuid primary key,
-  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  data jsonb not null,
-  updated_at timestamptz not null default now(),
-  synced_at timestamptz not null default now(),
-  deleted boolean not null default false
-);
-create index if not exists projects_owner_synced on public.projects (owner, synced_at);
-create or replace function public.touch_synced_at() returns trigger language plpgsql as $$
-begin new.synced_at = clock_timestamp(); return new; end $$;
-drop trigger if exists projects_touch on public.projects;
-create trigger projects_touch before insert or update on public.projects
-  for each row execute function public.touch_synced_at();
-alter table public.projects enable row level security;
-drop policy if exists "own projects" on public.projects;
-create policy "own projects" on public.projects for all to authenticated
-  using (owner = auth.uid()) with check (owner = auth.uid());
-
--- Private photo storage: each user only sees their own folder
-insert into storage.buckets (id, name, public) values ('studio', 'studio', false)
-  on conflict (id) do nothing;
-drop policy if exists "own photos" on storage.objects;
-create policy "own photos" on storage.objects for all to authenticated
-  using (bucket_id = 'studio' and (storage.foldername(name))[1] = auth.uid()::text)
-  with check (bucket_id = 'studio' and (storage.foldername(name))[1] = auth.uid()::text);`;
-
 async function settings() {
   cur = null;
-  const c = Cloud.cfg, s = Cloud.sess, out = (await DB.all('outbox')).length;
+  const out = (await DB.all('outbox')).length;
   let est = null; try { est = navigator.storage && await navigator.storage.estimate(); } catch (e) {}
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted().catch(() => false) : false;
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const origin = location.origin;
+  G.prepare();
   root.innerHTML = top({ back: '#/', title: 'Settings' }) + `<main class="wrap"><div class="grid2">
-    <section class="card"><h2>Cloud sync</h2>
-      ${Cloud.ready() ? `<p class="okline">${I.check.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-3px"')} Signed in as ${esc(s.email)}</p>
-        <p class="muted small">${lastSync ? 'Last sync ' + esc(fmtTime(lastSync)) : 'Not synced yet'}${syncErr ? ' · <span style="color:var(--danger)">' + esc(syncErr) + '</span>' : ''}</p>
-        <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncnow">${I.refresh} Sync now</button><button class="btn ghost" id="signout">Sign out</button></p>`
-      : `<p class="muted">Projects and photos are saved on this iPad. Connect your own Supabase account to back them up and see them on other devices. Only you can sign in and read them.</p>
-        <details ${c.url ? '' : 'open'}><summary><b style="font-weight:500">How to set it up (10 minutes, once)</b></summary>
+    <section class="card"><h2>Google Drive</h2>
+      ${G.linked() ? `<p class="okline">${I.check.replace('<svg', '<svg style="width:18px;height:18px;vertical-align:-3px"')} Connected${G.email ? ' as ' + esc(G.email) : ''}</p>
+        <p class="muted small">${lastSync ? 'Last sync ' + esc(fmtTime(lastSync)) : 'Not synced yet'}${syncErr ? ' · <span style="color:var(--danger)">' + esc(syncErr) + '</span>' : ''}${G.ready() ? '' : ' · Google asks Studio to confirm your sign-in about once an hour: tap Sync now.'}</p>
+        <p class="small">Everything is in the <b>Home Muse Studio</b> folder of your Drive: one folder per client with the photos, plans, a Google Doc with the archetype and onboarding answers, plus two Google Sheets listing every result.</p>
+        <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncnow">${I.refresh} Sync now</button><button class="btn ghost" id="signout">Disconnect</button></p>`
+      : `<p class="muted">Projects and photos are saved on this iPad. Connect your Google Drive to back them up, open them on other devices, and keep a Google Sheet of every archetype result and onboarding questionnaire. Studio can only see the files it creates itself.</p>
+        <details ${G.cid ? '' : 'open'}><summary><b style="font-weight:500">One-time setup (about 10 minutes, on a computer is easiest)</b></summary>
           <ol class="steps small" style="margin-top:10px">
-            <li>Create a free account at <b>supabase.com</b> and a new project (region: Europe).</li>
-            <li>Open <b>SQL Editor</b>, paste the script below and press <b>Run</b>. <button class="btn ghost sm" id="copysql">${I.copy} Copy script</button></li>
-            <li>Open <b>Authentication → Users → Add user</b>, and create yourself with your email and a password. Tick “Auto confirm”.</li>
-            <li>Open <b>Authentication → Sign In / Providers</b> and turn off <b>Allow new users to sign up</b>, so nobody else can create an account.</li>
-            <li>Open <b>Project Settings → API</b> (or <b>Data API</b>) and copy the <b>Project URL</b> and the <b>publishable</b> (or <b>anon public</b>) key into the fields below.</li>
+            <li>Go to <b>console.cloud.google.com</b>, signed in with your Google account, and create a project called <b>Home Muse Studio</b>.</li>
+            <li>In <b>APIs &amp; Services → Library</b>, enable <b>Google Drive API</b>, <b>Google Sheets API</b> and <b>Gmail API</b> (Gmail is used to email the full guides to clients from your address).</li>
+            <li>Open <b>Google Auth Platform</b> (or “OAuth consent screen”) and click <b>Get started</b>: app name <i>Home Muse Studio</i>, your email as support email, audience <b>External</b>. Then under <b>Audience → Test users</b>, add your own Google address.</li>
+            <li>Under <b>Clients</b>, create a client of type <b>Web application</b>. In <b>Authorised JavaScript origins</b> add <code>${esc(origin)}</code>${origin.includes('www.') ? ` and <code>${esc(origin.replace('www.', ''))}</code>` : ''}. Save, then copy the <b>Client ID</b> (it ends in <code>.apps.googleusercontent.com</code>).</li>
+            <li>Paste the Client ID below and tap <b>Connect Google Drive</b>. Google may warn that the app isn’t verified: that’s expected for your own private app, tap <b>Continue</b>, and tick every box (Drive and “Send email on your behalf”).</li>
           </ol>
-          <details class="small"><summary>Show the script</summary><pre style="white-space:pre-wrap;font-size:12px;background:var(--bg);padding:10px;border:1px solid var(--line);border-radius:4px">${esc(SQL)}</pre></details>
         </details>
-        <form id="cloudf" style="margin-top:16px">
-          <label class="f">Project URL<input type="text" inputmode="url" autocapitalize="off" spellcheck="false" name="url" value="${esc(c.url || '')}" placeholder="https://xxxx.supabase.co" required autocomplete="off"></label>
-          <label class="f">Publishable / anon key<input type="text" autocapitalize="off" spellcheck="false" name="key" value="${esc(c.key || '')}" placeholder="sb_publishable_… or eyJ…" required autocomplete="off"></label>
-          <div class="row"><label class="f">Your email<input type="email" name="email" value="${esc(c.email || '')}" required autocomplete="username"></label>
-          <label class="f">Password<input type="password" name="pw" required autocomplete="current-password"></label></div>
+        <form id="gform" style="margin-top:16px">
+          <label class="f">Google Client ID<input type="text" name="cid" value="${esc(G.cid)}" placeholder="1234…apps.googleusercontent.com" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
           <p class="err small" id="cerr" style="color:var(--danger)" hidden></p>
-          <button class="btn" type="submit">${I.cloud} Connect</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" type="button" id="savecid">Save Client ID</button><button class="btn" type="submit" ${G.cid ? '' : 'disabled'}>${I.cloud} Connect Google Drive</button></div>
         </form>`}
     </section>
     <div class="stack">
@@ -694,6 +896,10 @@ async function settings() {
         <label class="btn ghost" style="cursor:pointer">${I.share} Restore a backup<input type="file" accept=".json,application/json" hidden id="restore"></label></p>
         <p class="muted small" style="margin:10px 0 0">The backup file holds every project with its photos. Save it to iCloud Drive or Files.</p>
       </section>
+      <section class="card"><h2>Full archetype guides</h2>
+        <p class="muted small" style="margin:0 0 12px">Add each guide PDF once. When a client has paid, Studio attaches the right one to the email. ${G.linked() ? 'Copies are kept in the “Full archetype guides” folder of your Drive.' : ''}</p>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px 10px;align-items:center">${Object.entries(ARCH).map(([k, a]) => `<span>${esc(a[0])}<br><span class="small muted">${esc(a[1])}</span></span>${['en', 'fr'].map(l => { const m = guideMeta()[guideKey(k, l)]; return m && !m.removed ? `<button class="chip" data-gdel="${guideKey(k, l)}" aria-pressed="true" title="${esc(m.name)}">✓ ${l.toUpperCase()}</button>` : `<label class="chip" style="cursor:pointer;display:inline-flex;align-items:center">+ ${l.toUpperCase()}<input type="file" accept="application/pdf,.pdf" hidden data-gadd="${guideKey(k, l)}"></label>`; }).join('')}`).join('')}</div>
+      </section>
       <section class="card"><h2>Drawing</h2>
         <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="finger" ${(() => { try { return localStorage.getItem('hm-finger') === '1'; } catch (e) { return false; } })() ? 'checked' : ''} style="width:22px;height:22px"> Draw with my finger as well as the Pencil</label>
         <p class="muted small" style="margin:8px 0 0">When off, one finger scrolls the page and only the Apple Pencil draws. Two fingers always move and zoom.</p>
@@ -701,21 +907,38 @@ async function settings() {
     </div></div></main>`;
   bindCommon();
   const q = id => document.getElementById(id);
-  if (q('copysql')) q('copysql').onclick = async e => { e.preventDefault(); try { await navigator.clipboard.writeText(SQL); toast('Script copied'); } catch (err) { toast('Select the script below and copy it'); } };
-  if (q('cloudf')) q('cloudf').onsubmit = async e => {
-    e.preventDefault(); const f = new FormData(e.target), err = q('cerr'); err.hidden = true;
-    let url = String(f.get('url')).trim().replace(/\/+$/, ''); if (!/^https?:\/\//.test(url)) url = 'https://' + url;
-    Cloud.cfg = { url, key: String(f.get('key')).trim(), email: String(f.get('email')).trim() };
-    const b = e.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Connecting…';
-    try { await Cloud.signIn(Cloud.cfg.email, String(f.get('pw'))); toast('Connected. Syncing your projects…'); syncErr = ''; await sync(); settings(); }
-    catch (x) { err.textContent = /Failed to fetch|Load failed/i.test(x.message) ? 'Could not reach that address. Check the Project URL and your connection.' : x.message; err.hidden = false; b.disabled = false; b.innerHTML = I.cloud + ' Connect'; }
+  if (q('savecid')) q('savecid').onclick = () => {
+    const v = q('gform').cid.value.trim();
+    if (!/\.apps\.googleusercontent\.com$/.test(v)) { q('cerr').textContent = 'That doesn’t look like a Client ID. It ends in .apps.googleusercontent.com'; q('cerr').hidden = false; return; }
+    G.cid = v; G.prepare(); toast('Client ID saved'); setTimeout(settings, 600);
+  };
+  if (q('gform')) q('gform').onsubmit = async e => {
+    e.preventDefault(); const err = q('cerr'); err.hidden = true;
+    try { await G.connect(); toast('Google Drive connected. Syncing…'); await sync(); settings(); }
+    catch (x) { err.textContent = x.message; err.hidden = false; }
   };
   if (q('syncnow')) q('syncnow').onclick = async () => { await sync(true); settings(); };
-  if (q('signout')) q('signout').onclick = async () => { if (!await confirmBox('Sign out of cloud sync?', 'Your projects stay on this iPad. Changes will sync again when you sign back in.', 'Sign out')) return; Cloud.sess = null; settings(); };
+  if (q('signout')) q('signout').onclick = async () => { if (!await confirmBox('Disconnect Google Drive?', 'Your projects stay on this iPad and in Drive. Changes will sync again when you reconnect.', 'Disconnect')) return; G.unlink(); settings(); };
+  root.querySelectorAll('[data-gadd]').forEach(inp => inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    if (f.type && f.type !== 'application/pdf') { toast('Please choose a PDF'); return; }
+    const k = inp.dataset.gadd, m = guideMeta();
+    const old = m[k] && m[k].gid;
+    await DB.put('blobs', f, 'guide:' + k);
+    m[k] = { name: f.name, at: Date.now(), gid: null, old: old || (m[k] && m[k].old) || null };
+    setGuideMeta(m); toast('Guide added');
+    flushGuidesLater(); settings();
+  });
+  root.querySelectorAll('[data-gdel]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.gdel, m = guideMeta();
+    if (!await confirmBox('Remove this guide?', `${m[k].name} will be removed from Studio${m[k].gid ? ' and its copy moved to the Drive bin' : ''}.`, 'Remove')) return;
+    await DB.del('blobs', 'guide:' + k); if (m[k].gid) m[k].removed = 1; else delete m[k]; setGuideMeta(m); syncSoon(); settings();
+  });
   q('finger').onchange = e => { try { localStorage.setItem('hm-finger', e.target.checked ? '1' : '0'); } catch (x) {} };
   q('backup').onclick = backup;
   q('restore').onchange = e => restore(e.target.files[0]);
 }
+const flushGuidesLater = () => { if (G.ready()) sync(); else syncSoon(); };
 const toDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
 async function backup() {
   toast('Preparing the backup…', 10000);
@@ -723,7 +946,7 @@ async function backup() {
   let first = true;
   for (const p of live()) for (const ph of p.photos) {
     let b = await DB.get('blobs', 'p:' + ph.id);
-    if (!b && ph.synced && Cloud.ready()) { try { b = await Cloud.download(`${Cloud.sess.uid}/${p.id}/${ph.id}.jpg`); } catch (e) {} }
+    if (!b && ph.gid && G.ready()) { try { b = await gGet(ph.gid); } catch (e) {} }
     if (!b) continue;
     parts.push((first ? '' : ',') + JSON.stringify(ph.id) + ':' + JSON.stringify(await toDataURL(b))); first = false;
   }
@@ -738,7 +961,7 @@ async function restore(file) {
   for (const p of j.projects || []) {
     const loc = mem.get(p.id);
     if (loc && loc.updatedAt >= p.updatedAt) continue;
-    for (const ph of p.photos) { const d = j.photos && j.photos[ph.id]; if (d) { const b = await (await fetch(d)).blob(); await DB.put('blobs', b, 'p:' + ph.id); const img = await loadImage(d); await DB.put('blobs', (await resize(img, 520, 0.78)).blob, 't:' + ph.id); ph.synced = 0; } }
+    for (const ph of p.photos) { const d = j.photos && j.photos[ph.id]; if (d) { const b = await (await fetch(d)).blob(); await DB.put('blobs', b, 'p:' + ph.id); const img = await loadImage(d); await DB.put('blobs', (await resize(img, 520, 0.78)).blob, 't:' + ph.id); } }
     if (loc) { Object.keys(loc).forEach(k => delete loc[k]); Object.assign(loc, p); } else mem.set(p.id, p);
     await save(mem.get(p.id), true); n++;
   }
@@ -766,7 +989,7 @@ function route() {
   window.addEventListener('offline', pill);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
   setInterval(() => { if (!document.hidden) sync(); }, 120000);
-  sync(); flushOutbox();
+  G.prepare(); sync(); flushOutbox();
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/studio-sw.js', { scope: '/' }).catch(() => {});
 })();
