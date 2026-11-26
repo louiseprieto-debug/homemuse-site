@@ -1,9 +1,9 @@
 /* Home Muse Studio offline support. Registered only by /studio/ (Lou's iPad), never by the public site.
    It answers only for the Studio, the archetype quiz and the onboarding questionnaire;
    every other page of homemuse.fr goes straight to the network as usual. */
-const CACHE = 'hm-studio-v2';
+const CACHE = 'hm-studio-v3';
 const SHELL = [
-  '/studio/', '/studio/studio.css?v=2', '/studio/draw.js?v=2', '/studio/app.js?v=2', '/studio/manifest.webmanifest', '/studio/icon-180.png', '/studio/icon-512.png',
+  '/studio/', '/studio/studio.css?v=3', '/studio/draw.js?v=3', '/studio/app.js?v=3', '/studio/manifest.webmanifest', '/studio/icon-180.png', '/studio/icon-512.png',
   '/quiz/', '/clarity/', '/favicon.svg', '/assets/consent.js?v=2',
   '/quiz/img/logo.png', '/quiz/img/REF.jpg', '/quiz/img/TAB.jpg', '/quiz/img/CAB.jpg', '/quiz/img/GAL.jpg', '/quiz/img/ATE.jpg', '/quiz/img/NID.jpg', '/quiz/img/SOL.jpg'
 ];

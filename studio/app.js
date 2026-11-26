@@ -85,7 +85,75 @@ async function save(p, quiet) {
   if (!quiet) syncSoon();
 }
 const saveSoon = (() => { const m = new Map(); return p => { clearTimeout(m.get(p.id)); m.set(p.id, setTimeout(() => save(p), 700)); }; })();
-const clean = p => { const o = Object.assign({}, p); delete o._dirty; return o; };
+const clean = p => { const o = Object.assign({}, p); Object.keys(o).forEach(k => { if (k[0] === '_') delete o[k]; }); return o; };
+/* Combine two copies of the same project (this device and Drive) so that nothing done on one device is lost:
+   results keep the most recent version, notes / drawings / photos are combined, deletions are remembered in "gone". */
+function later(x, y) { if (!x) return y || null; if (!y) return x; return (y.at || 0) > (x.at || 0) ? y : x; }
+function mergeProjects(a, b) {
+  const newer = (b.updatedAt || 0) >= (a.updatedAt || 0) ? b : a, older = newer === a ? b : a;
+  const m = JSON.parse(JSON.stringify(clean(newer)));
+  const gone = new Set([...(a.gone || []), ...(b.gone || [])]); m.gone = [...gone];
+  const pick = {
+    notes: (x, y) => ((y.u || y.at || 0) >= (x.u || x.at || 0) ? y : x),
+    sheets: (x, y) => ((y.updatedAt || 0) >= (x.updatedAt || 0) ? y : x),
+    photos: (x, y) => Object.assign({}, x, y, { gid: y.gid || x.gid, gname: y.gid ? y.gname : x.gname })
+  };
+  for (const k of Object.keys(pick)) {
+    const map = new Map();
+    for (const it of [...(older[k] || []), ...(newer[k] || [])]) { if (gone.has(it.id)) continue; const prev = map.get(it.id); map.set(it.id, prev ? pick[k](prev, it) : it); }
+    m[k] = JSON.parse(JSON.stringify([...map.values()]));
+  }
+  for (const k of ['quiz', 'clarity', 'guide']) m[k] = JSON.parse(JSON.stringify(later(a[k], b[k])));
+  const dr = later(a.clarityDraft, b.clarityDraft);
+  m.clarityDraft = dr && (!m.clarity || (dr.at || 0) > (m.clarity.at || 0)) ? JSON.parse(JSON.stringify(dr)) : null;
+  m.client = Object.assign({}, older.client || {}, m.client || {});
+  Object.keys(older.client || {}).forEach(f => { if (!m.client[f]) m.client[f] = older.client[f]; });
+  m.trash = [...new Set([...(a.trash || []), ...(b.trash || [])])];
+  m.drive = Object.assign({}, older.drive || {}, m.drive || {});
+  Object.keys(older.drive || {}).forEach(f => { if (!m.drive[f]) m.drive[f] = older.drive[f]; });
+  m.docAt = Math.min(a.docAt || 0, b.docAt || 0);
+  m.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
+  return m;
+}
+const sameContent = (x, y) => { const f = o => JSON.stringify(Object.assign({}, clean(o), { updatedAt: 0, docAt: 0, drive: 0, gone: (o.gone || []).slice().sort() })); return f(x) === f(y); };
+/* Every result this device ever receives is also kept here, so it can always be put back. */
+async function archive(pid, kind, data) { const a = (await DB.get('kv', 'archive')) || []; a.push({ pid, kind, data, at: Date.now() }); await DB.put('kv', a, 'archive'); }
+async function reapplyArchive(p) {
+  const a = ((await DB.get('kv', 'archive')) || []).filter(x => x.pid === p.id);
+  let changed = false;
+  for (const x of a) {
+    if (x.kind === 'quiz' && (!p.quiz || (p.quiz.at || 0) < x.data.at)) { p.quiz = x.data; changed = true; }
+    if (x.kind === 'clarity' && (!p.clarity || (p.clarity.at || 0) < x.data.at)) { p.clarity = x.data; if (p.clarityDraft && (p.clarityDraft.at || 0) <= x.data.at) p.clarityDraft = null; changed = true; }
+  }
+  return changed;
+}
+const ARCH_BY_NAME = n => Object.keys(ARCH).find(k => String(n || '').includes(ARCH[k][0]) || String(n || '').includes(ARCH[k][1]));
+/* One-off rescue of results lost by the earlier sync: questionnaire answers still in this browser, and quiz rows still queued for the Google Sheet. */
+async function recoverLost() {
+  const rows = (await DB.all('outbox')).filter(m => m.kind === 'sheet' && m.k === 'quiz');
+  const found = [];
+  for (const p of live()) {
+    let ch = await reapplyArchive(p);
+    if (!p.clarity && !p.clarityDraft) {
+      const ls = lsGet('hm-studio-clarity-' + p.id, null);
+      if (ls && ls.A && Object.values(ls.A).some(v => v != null && v !== '' && !(Array.isArray(v) && !v.length))) { p.clarityDraft = { answers: ls.A, lang: ls.lang || p.lang, review: null, at: Date.now(), recovered: 1 }; ch = true; found.push('onboarding answers for ' + (p.client.name || 'a client')); }
+    }
+    if (!p.quiz) {
+      const r = rows.filter(m => m.pid === p.id || (!m.pid && m.row[1] && m.row[1] === p.client.name)).pop();
+      if (r) {
+        const col = h => r.row[r.header.indexOf(h)];
+        const main = ARCH_BY_NAME(col('Archétype principal')), second = ARCH_BY_NAME(col('Archétype secondaire')) || main;
+        if (main) {
+          const nm = k => ({ en: ARCH[k][0], fr: ARCH[k][1] });
+          p.quiz = { main, second, names: { main: nm(main), second: nm(second) }, color: '#9c7a45', at: r.at, lang: String(col('Langue / Language') || p.lang).toLowerCase(), name: col('Prénom / First name'), email: col('E-mail'), recovered: 1 };
+          ch = true; found.push('archetype for ' + (p.client.name || 'a client'));
+        }
+      }
+    }
+    if (ch) await save(p);
+  }
+  if (found.length) toast('Recovered ' + found.join(' and '), 6000);
+}
 async function purgeLocal(p) {
   for (const ph of p.photos || []) { await DB.del('blobs', 'p:' + ph.id); await DB.del('blobs', 't:' + ph.id); urlCache.delete('p:' + ph.id); urlCache.delete('t:' + ph.id); }
   await DB.del('projects', p.id); mem.delete(p.id); lsSet('hm-studio-clarity-' + p.id, null);
@@ -266,7 +334,7 @@ function profileHTML(p) {
       ${q.tips ? `<p><b>First ideas</b></p><ol>${q.tips.en.map(t => `<li>${e(t)}</li>`).join('')}</ol>` : ''}
       ${q.swatches ? `<p><b>Colours:</b> ${q.swatches.map(s => e(s[2] + ' ' + s[0])).join(', ')}</p>` : ''}
       <p>Taken ${e(fmtTime(q.at))}${q.guide ? ' · Full guide requested (€19.99)' : ''}</p>` : '<p>Not taken yet.</p>'}
-    <h2>Onboarding questionnaire</h2>${c ? `<p>Completed ${e(fmtTime(c.at))}</p>${c.review.map(s => `<h3>${e(s.s)}</h3>${s.f.map(f => `<p><b>${e(f.q)}</b><br>${e(f.a || '—').replace(/\n/g, '<br>')}</p>`).join('')}`).join('')}` : '<p>Not completed yet.</p>'}
+    <h2>Onboarding questionnaire</h2>${c && c.review ? `<p>Completed ${e(fmtTime(c.at))}</p>${c.review.map(s => `<h3>${e(s.s)}</h3>${s.f.map(f => `<p><b>${e(f.q)}</b><br>${e(f.a || '—').replace(/\n/g, '<br>')}</p>`).join('')}`).join('')}` : '<p>Not completed yet.</p>'}
     </body></html>`;
 }
 /* Running Google Sheets: one row per archetype result / onboarding questionnaire. */
@@ -287,7 +355,7 @@ async function appendRow(k, header, row, root) {
 }
 function logRow(kind, p, data) {
   const keys = Object.keys(data || {}).filter(k => k[0] !== '_' && k !== 'Source');
-  return { kind: 'sheet', k: kind, header: ['Saved', 'Studio project', ...keys], row: [new Date().toLocaleString('en-GB'), p.client.name || '', ...keys.map(k => String(data[k] == null ? '' : data[k]))] };
+  return { kind: 'sheet', k: kind, pid: p.id, header: ['Saved', 'Studio project', ...keys], row: [new Date().toLocaleString('en-GB'), p.client.name || '', ...keys.map(k => String(data[k] == null ? '' : data[k]))] };
 }
 
 /* ---------- full archetype guides (PDF), emailed from Lou's Gmail ---------- */
@@ -381,11 +449,17 @@ async function sync(manual) {
       const pid = f.appProperties.pid, u = +f.appProperties.u || 0, loc = mem.get(pid);
       seen.add(pid);
       if (f.trashed || f.appProperties.del === '1') { if (loc && !(loc._dirty && loc.updatedAt > u)) { await purgeLocal(loc); pulled = true; } continue; }
-      if (!loc || u > (loc.updatedAt || 0)) {
-        const rd = JSON.parse(await (await gGet(f.id)).text()); rd.drive = Object.assign(rd.drive || {}, { json: f.id }); delete rd._dirty;
-        if (loc) { Object.keys(loc).forEach(k => delete loc[k]); Object.assign(loc, rd); } else mem.set(pid, rd);
-        await DB.put('projects', mem.get(pid)); pulled = true;
-      }
+      if (loc && (loc._base || 0) >= u) continue; // already have this version
+      if (loc && loc._base == null && !loc._dirty && (loc.updatedAt || 0) >= u) { loc._base = u; await DB.put('projects', loc); continue; }
+      const rd = JSON.parse(await (await gGet(f.id)).text()); rd.drive = Object.assign(rd.drive || {}, { json: f.id });
+      Object.keys(rd).forEach(k => { if (k[0] === '_') delete rd[k]; });
+      if (!loc) { rd._base = u; mem.set(pid, rd); await reapplyArchive(rd); await DB.put('projects', rd); pulled = true; continue; }
+      const merged = mergeProjects(loc, rd), wasDirty = !!loc._dirty;
+      await reapplyArchive(merged);
+      const differs = !sameContent(merged, rd);
+      Object.keys(loc).forEach(k => delete loc[k]); Object.assign(loc, merged);
+      loc._base = u; if (differs || wasDirty) { loc._dirty = 1; loc.updatedAt = Math.max(loc.updatedAt || 0, u) + 1; }
+      await DB.put('projects', loc); pulled = true;
     }
     for (const loc of [...mem.values()]) if (loc.drive && loc.drive.json && !seen.has(loc.id) && !loc._dirty) { await purgeLocal(loc); pulled = true; } // deleted in Drive
     /* 2. push projects changed here: photos, drawings, client doc, then project.json */
@@ -418,6 +492,7 @@ async function sync(manual) {
       p.trash = [];
       p.updatedAt = Math.max(Date.now(), p.updatedAt + 1); const at = p.updatedAt;
       p.drive.json = await gUpload({ id: p.drive.json, name: 'project.json', parent: p.drive.folder, mime: 'application/json', blob: new Blob([JSON.stringify(clean(p))]), props: { hm: 'project', pid: p.id, u: String(at) } });
+      p._base = at;
       if (p.updatedAt === at) p._dirty = 0;
       await DB.put('projects', p);
     }
@@ -480,6 +555,7 @@ window.addEventListener('message', async e => {
   const fill = (k, v) => { if (v && !p.client[k]) p.client[k] = v; };
   if (d.kind === 'quiz') {
     p.quiz = Object.assign({}, d.result, { at: Date.now() });
+    await archive(p.id, 'quiz', p.quiz);
     fill('name', d.result.name); fill('email', d.result.email);
     await save(p);
     if (d.email) { queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email)); queueRow(logRow('quiz', p, d.email)); }
@@ -492,6 +568,7 @@ window.addEventListener('message', async e => {
   } else if (d.kind === 'clarity') {
     p.clarity = { answers: d.answers, review: d.review, lang: d.lang, at: Date.now() };
     p.clarityDraft = null;
+    await archive(p.id, 'clarity', p.clarity);
     fill('name', d.answers.name); fill('email', d.answers.email); fill('phone', d.answers.phone);
     await save(p);
     if (d.email) { queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email)); queueRow(logRow('onboarding', p, d.email)); }
@@ -616,6 +693,7 @@ function overview(p, pane) {
       <section class="card">
         <div class="sectionhead" style="margin:0 0 10px"><h2 style="margin:0">Onboarding</h2><a class="btn ghost sm" href="#/p/${p.id}/onboarding">${cl ? 'Edit answers' : dr ? 'Continue' : 'Start'}</a></div>
         ${cl ? `<p class="small muted" style="margin:0 0 6px">Completed ${esc(fmtTime(cl.at))} · ${answered(cl.review)} of ${total(cl.review)} questions answered</p>${reviewHTML(cl.review, true)}`
+          : dr && dr.recovered ? `<p style="margin:0"><b>Answers recovered.</b> Open the questionnaire and press <i>Send</i> at the end to save them properly.</p>`
           : dr ? `<p class="muted" style="margin:0">In progress: ${answered(dr.review)} of ${total(dr.review)} questions answered.</p>${reviewHTML(dr.review, true)}`
           : `<p class="muted" style="margin:0">Not started. Go through the questionnaire together during the visit, or let your client fill it in.</p>`}
       </section>
@@ -663,12 +741,32 @@ function reviewHTML(r, collapsed) {
 }
 
 /* ---------- quiz and questionnaire, inside the app ---------- */
-function embed(p, pane, tab) {
+function embed(p, pane, tab, frame) {
   const quiz = tab === 'archetype';
+  if (!frame && (quiz ? p.quiz : p.clarity)) {
+    const q = p.quiz;
+    pane.innerHTML = `<main class="wrap"><section class="card">
+      <div class="sectionhead" style="margin:0 0 14px"><h2 style="margin:0">${quiz ? 'Archetype result' : 'Onboarding answers'}</h2>
+        <button class="btn ghost sm" id="again">${quiz ? I.refresh + ' Retake the quiz' : I.edit + ' Edit the answers'}</button></div>
+      ${quiz ? `<div class="arch-card"><img src="/quiz/img/${esc(q.main)}.jpg" alt=""><div><h3>${esc(q.names.main.en)}</h3>
+          <div class="muted small">${esc(q.names.main.fr)} · with a touch of ${esc(q.names.second.en)}</div>
+          ${q.quote ? `<p class="q">${esc(q.quote.en)}</p>` : ''}${q.swatches ? `<div class="sw">${q.swatches.map(x => `<span style="background:${esc(x[0])}" title="${esc(x[2])}"></span>`).join('')}</div>` : ''}
+          <p class="small muted" style="margin:8px 0 0">Taken ${esc(fmtTime(q.at))}</p></div></div>
+        ${q.portrait ? `<p style="margin-top:16px">${esc(q.portrait.en)}</p>` : ''}${q.strength ? `<p><b>Strength:</b> ${esc(q.strength.en)}</p>` : ''}${q.shadow ? `<p><b>Shadow:</b> ${esc(q.shadow.en)}</p>` : ''}
+        ${q.tips ? `<p><b>First ideas</b></p><ol>${(q.tips.en || []).map(t => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}`
+      : `<p class="small muted" style="margin:0">Completed ${esc(fmtTime(p.clarity.at))}</p>${reviewHTML(p.clarity.review, false) || '<p>Open “Edit the answers” and press Send to see them here.</p>'}`}
+    </section></main>`;
+    document.getElementById('again').onclick = async () => {
+      if (quiz && !await dialog({ title: 'Retake the quiz?', text: 'The new result replaces this one in the project. The earlier result stays in your emails and Google Sheet.', ok: 'Retake' })) return;
+      embed(p, pane, tab, true);
+    };
+    return;
+  }
   const prm = new URLSearchParams({ studio: p.id, lang: p.lang || 'fr', name: quiz ? (p.client.name || '').split(' ')[0] : (p.client.name || ''), email: p.client.email || '' });
   if (!quiz && p.client.phone) prm.set('phone', p.client.phone);
   if (quiz && p.guidePaid) prm.set('paid', '1');
-  if (!quiz) { const a = (p.clarity || p.clarityDraft || {}).answers; lsSet('hm-studio-clarity-' + p.id, a ? { A: a, lang: (p.clarity || p.clarityDraft).lang || p.lang } : null); }
+  const seed = () => { const c = later(p.clarity, p.clarityDraft), a = c && c.answers; if (a) lsSet('hm-studio-clarity-' + p.id, { A: a, lang: c.lang || p.lang }); };
+  if (!quiz) seed();
   const src = (quiz ? '/quiz/?' : '/clarity/?') + prm.toString();
   const who = esc((p.client.name || 'your client').split(' ')[0]);
   const status = quiz ? (p.quiz ? `Saved result: <b>${esc(p.quiz.names.main.en)}</b>. Taking it again replaces it.` : `Hand the iPad to ${who}. The result is saved to this project and emailed to you.`)
@@ -682,7 +780,7 @@ function embed(p, pane, tab) {
   fr.addEventListener('load', () => { try { fr.contentDocument.querySelectorAll('a[href]').forEach(a => { if (!/^mailto:/.test(a.getAttribute('href'))) { a.removeAttribute('href'); a.style.pointerEvents = 'none'; } }); } catch (e) {} });
   document.getElementById('restart').onclick = async () => {
     if (!quiz && !await confirmBox('Reload the questionnaire?', 'Answers already typed are kept.', 'Reload')) return;
-    if (!quiz) { const a = (p.clarity || p.clarityDraft || {}).answers; lsSet('hm-studio-clarity-' + p.id, a ? { A: a, lang: p.lang } : null); }
+    if (!quiz) seed();
     fr.src = src;
   };
   document.getElementById('cm').onclick = () => { ew.classList.add('clientmode'); hx.hidden = false; toast('Client mode: hold the lock button for 1 second to come back', 3500); };
@@ -710,9 +808,9 @@ function notes(p, pane) {
       <textarea placeholder="Write here…" aria-label="Note">${esc(n.body)}</textarea>`;
     const [ti, , del] = el.querySelector('.nh').children, ta = el.querySelector('textarea');
     const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.max(140, ta.scrollHeight + 4) + 'px'; };
-    ti.oninput = () => { n.title = ti.value; saveSoon(p); };
-    ta.oninput = () => { n.body = ta.value; grow(); saveSoon(p); };
-    del.onclick = async () => { if (n.body.trim() && !await confirmBox('Delete this note?', n.title || 'This note will be removed.')) return; p.notes = p.notes.filter(x => x !== n); await save(p); notes(p, pane); refreshTabs(p); };
+    ti.oninput = () => { n.title = ti.value; n.u = Date.now(); saveSoon(p); };
+    ta.oninput = () => { n.body = ta.value; n.u = Date.now(); grow(); saveSoon(p); };
+    del.onclick = async () => { if (n.body.trim() && !await confirmBox('Delete this note?', n.title || 'This note will be removed.')) return; p.notes = p.notes.filter(x => x !== n); p.gone = (p.gone || []).concat(n.id); await save(p); notes(p, pane); refreshTabs(p); };
     list.appendChild(el); requestAnimationFrame(grow);
   });
   pane.insertAdjacentHTML('beforeend', `<datalist id="rooms">${ROOMS.map(r => `<option value="${esc(r)}">`).join('')}</datalist>`);
@@ -743,7 +841,7 @@ function bindSheetCards(p, pane, rerender) {
     const s = p.sheets.find(x => x.id === el.dataset.s); if (!s) return;
     el.onclick = e => { if (e.target.closest('[data-del]')) return; openSheet(p, s, rerender); };
     el.onkeydown = e => { if (e.key === 'Enter') openSheet(p, s, rerender); };
-    el.querySelector('[data-del]').onclick = async () => { if (!await confirmBox('Delete “' + (s.name || 'this drawing') + '”?', 'The drawing will be removed from the project.')) return; p.sheets = p.sheets.filter(x => x !== s); if (s.gid) p.trash = (p.trash || []).concat(s.gid); await save(p); rerender(); refreshTabs(p); };
+    el.querySelector('[data-del]').onclick = async () => { if (!await confirmBox('Delete “' + (s.name || 'this drawing') + '”?', 'The drawing will be removed from the project.')) return; p.sheets = p.sheets.filter(x => x !== s); p.gone = (p.gone || []).concat(s.id); if (s.gid) p.trash = (p.trash || []).concat(s.gid); await save(p); rerender(); refreshTabs(p); };
     sheetThumb(p, s).then(u => { const im = el.querySelector('img'); if (im && u) im.src = u; });
   });
 }
@@ -844,7 +942,7 @@ function lightbox(p, list, i, rerender) {
     if (a.dataset.a === 'share') { const b = await DB.get('blobs', 'p:' + ph.id) || await fetch(await photoURL(p, ph, 'p')).then(r => r.blob()); shareBlob(b, safeName((p.client.name || '') + ' ' + ph.room) + '.jpg'); }
     if (a.dataset.a === 'del') {
       if (!await confirmBox('Delete this photo?', 'It will be removed from the project.')) return;
-      p.photos = p.photos.filter(x => x !== ph); if (ph.gid) p.trash = (p.trash || []).concat(ph.gid);
+      p.photos = p.photos.filter(x => x !== ph); p.gone = (p.gone || []).concat(ph.id); if (ph.gid) p.trash = (p.trash || []).concat(ph.gid);
       await DB.del('blobs', 'p:' + ph.id); await DB.del('blobs', 't:' + ph.id); urlCache.delete('p:' + ph.id); urlCache.delete('t:' + ph.id);
       list.splice(i, 1); dirty = true; refreshTabs(p); if (!list.length) close(); else go(0);
     }
@@ -989,6 +1087,7 @@ function route() {
   window.addEventListener('offline', pill);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sync(); });
   setInterval(() => { if (!document.hidden) sync(); }, 120000);
+  await recoverLost(); if (location.hash.startsWith('#/p/')) route();
   G.prepare(); sync(); flushOutbox();
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/studio-sw.js', { scope: '/' }).catch(() => {});
