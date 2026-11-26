@@ -10,6 +10,7 @@ const INBOX = 'contact@homemuse.fr';
 const ROOMS = ['Entrance', 'Living room', 'Kitchen', 'Dining room', 'Bedroom', 'Bathroom', 'Office', 'Kids’ room', 'Terrace', 'Garden', 'Other'];
 const STATUSES = ['Visit booked', 'Visited', 'Proposal sent', 'In progress', 'Done'];
 const SERVICES = ['Design audit', 'Home staging', 'Other services'];
+const ARCH = { REF: ['The Sanctuary', 'Le Refuge'], TAB: ['The Gathering Place', 'La Table Ouverte'], CAB: ['The Storyteller', 'Le Cabinet de Curiosités'], GAL: ['The Curator', 'La Galerie'], ATE: ['The Free Spirit', 'L’Atelier Libre'], NID: ['The Nest', 'Le Nid'], SOL: ['The Sun Seeker', 'La Maison Soleil'] };
 
 /* ---------- small helpers ---------- */
 const root = document.getElementById('root');
@@ -150,7 +151,7 @@ const safeName = s => (s || 'home-muse').replace(/[^\w\- ]+/g, '').trim().replac
          project.json                         (the whole project, used for sync)
          Archetype & onboarding – <Client>    (Google Doc)
          Photos/  Plans and drawings/         (JPEG and PNG files) */
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send';
 const DRIVE = 'https://www.googleapis.com/drive/v3/files', UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER = 'application/vnd.google-apps.folder', GDOC = 'application/vnd.google-apps.document', GSHEET = 'application/vnd.google-apps.spreadsheet';
 class NeedAuth extends Error {}
@@ -177,7 +178,7 @@ const G = {
     return new Promise((res, rej) => {
       if (!tc) { this.prepare(); rej(new Error('Google is still loading. Tap again in a moment.')); return; }
       pending = { res, rej };
-      tc.requestAccessToken({ prompt: lsGet('hm-studio-glinked', false) ? '' : 'consent', login_hint: this.email || undefined });
+      tc.requestAccessToken({ prompt: lsGet('hm-studio-glinked', false) && !lsGet('hm-studio-gconsent', false) ? '' : 'consent', login_hint: this.email || undefined });
     });
   }
 };
@@ -190,7 +191,8 @@ function mkClient() {
       const p = pending; pending = null;
       if (r.error) { p && p.rej(new Error(r.error_description || r.error)); return; }
       G.tok = { access: r.access_token, exp: Date.now() + (r.expires_in || 3600) * 1000 };
-      lsSet('hm-studio-glinked', true); syncErr = '';
+      lsSet('hm-studio-glinked', true); lsSet('hm-studio-gconsent', false); syncErr = '';
+      if (r.scope && !/gmail\.send/.test(r.scope)) toast('Studio can sync, but can’t send guide emails: tick the Gmail box when Google asks.', 6000);
       try { const a = await (await gfetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)')).json(); lsSet('hm-studio-gemail', a.user.emailAddress); } catch (e) {}
       p && p.res(); pill();
     },
@@ -288,6 +290,79 @@ function logRow(kind, p, data) {
   return { kind: 'sheet', k: kind, header: ['Saved', 'Studio project', ...keys], row: [new Date().toLocaleString('en-GB'), p.client.name || '', ...keys.map(k => String(data[k] == null ? '' : data[k]))] };
 }
 
+/* ---------- full archetype guides (PDF), emailed from Lou's Gmail ---------- */
+const guideKey = (k, l) => k + '-' + l;
+const guideMeta = () => lsGet('hm-studio-guides', {});
+const setGuideMeta = m => lsSet('hm-studio-guides', m);
+async function guidesFolder(root) {
+  let id = await DB.get('kv', 'gguides');
+  if (id && await gAlive(id)) return id;
+  const f = (await gList(`${gProps('hm', 'guides')} and trashed=false`))[0];
+  id = f ? f.id : await gFolder('Full archetype guides', root, { hm: 'guides' });
+  await DB.put('kv', id, 'gguides'); return id;
+}
+async function syncGuides(root) {
+  const meta = guideMeta(), folder = await guidesFolder(root);
+  for (const [k, m] of Object.entries(meta)) {
+    if (m.gid || m.removed) continue;
+    const b = await DB.get('blobs', 'guide:' + k); if (!b) continue;
+    m.gid = await gUpload({ name: m.name, parent: folder, mime: 'application/pdf', blob: b, props: { hm: 'guide', k } });
+    if (m.old) { await gTrash(m.old); delete m.old; }
+  }
+  for (const [k, m] of Object.entries(meta)) if (m.removed) { if (m.gid) await gTrash(m.gid); delete meta[k]; }
+  for (const f of await gList(`${gProps('hm', 'guide')} and trashed=false`, 'id,name,appProperties,modifiedTime')) {
+    const k = f.appProperties.k, m = meta[k];
+    if (m && m.gid === f.id) continue;
+    if (m && m.gid && m.gid !== f.id && (m.at || 0) > Date.parse(f.modifiedTime)) continue;
+    await DB.put('blobs', await gGet(f.id), 'guide:' + k);
+    meta[k] = { name: f.name, gid: f.id, at: Date.parse(f.modifiedTime) };
+  }
+  setGuideMeta(meta);
+}
+const b64 = s => btoa(unescape(encodeURIComponent(s)));
+const wrap76 = s => s.replace(/.{1,76}/g, '$&\r\n');
+const blobB64 = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(',')[1]); fr.readAsDataURL(b); });
+function guideEmail(g) {
+  const fr = g.lang === 'fr', a = ARCH[g.key] || ['', ''], name = fr ? a[1] : a[0], first = esc((g.name || '').split(' ')[0]);
+  const subject = fr ? `Votre guide Home Muse : ${name}` : `Your Home Muse guide: ${name}`;
+  const p = fr ? [`Bonjour ${first},`, `Merci pour ce moment passé ensemble chez vous. Comme promis, voici votre guide complet Home Muse pour votre archétype, <b>${esc(name)}</b>.`, `Vous y trouverez votre portrait complet, votre élément Feng Shui, vos couleurs et matières, et des idées concrètes pièce par pièce. Prenez le temps de le lire tranquillement : nous en reparlerons lors de nos prochaines étapes.`, `Belle découverte,`]
+    : [`Hello ${first},`, `Thank you for welcoming me into your home. As promised, here is your full Home Muse guide for your archetype, <b>${esc(name)}</b>.`, `Inside you’ll find your complete portrait, your Feng Shui element, your colours and materials, and practical ideas room by room. Take your time with it: we’ll talk it through as we take the next steps together.`, `Enjoy,`];
+  const html = `<div style="font-family:Georgia,serif;font-size:16px;line-height:1.6;color:#2b3328;max-width:560px">${p.map(x => `<p>${x}</p>`).join('')}<p style="font-size:22px;font-style:italic;color:#9c7a45;margin:4px 0 0">Lou</p><p style="font-size:13px;color:#5f6656">Home Muse · homemuse.fr</p></div>`;
+  return { subject, html, file: `Home-Muse-${(fr ? a[1] : a[0]).replace(/[^\w]+/g, '-')}-${g.lang.toUpperCase()}.pdf` };
+}
+async function sendGuide(g, pdf) {
+  const e = guideEmail(g), bd = 'hmb' + sid();
+  const raw = [`To: ${g.to}`, `Subject: =?UTF-8?B?${b64(e.subject)}?=`, 'MIME-Version: 1.0', `Content-Type: multipart/mixed; boundary="${bd}"`, '',
+    `--${bd}`, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', wrap76(b64(e.html)),
+    `--${bd}`, `Content-Type: application/pdf; name="${e.file}"`, `Content-Disposition: attachment; filename="${e.file}"`, 'Content-Transfer-Encoding: base64', '', wrap76(await blobB64(pdf)),
+    `--${bd}--`, ''].join('\r\n');
+  try { await gfetch('https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media', { method: 'POST', headers: { 'Content-Type': 'message/rfc822' }, body: raw }); }
+  catch (x) { if (x.status === 403) { lsSet('hm-studio-gconsent', true); G.tok = null; throw new Error('Reconnect Google and allow Studio to send emails'); } throw x; }
+}
+async function queueGuide(p, manual) {
+  const q = p.quiz; if (!q) return;
+  const to = q.email || p.client.email;
+  if (!to) { toast('Add the client’s email in the Client tab, then press “Send guide”.', 5000); p.guide = { state: 'noemail', at: Date.now() }; await save(p); return; }
+  for (const m of (await DB.all('outbox')).filter(x => x.kind === 'guide' && x.pid === p.id)) await DB.del('outbox', m.id);
+  const lang = q.lang || p.lang || 'fr';
+  await DB.put('outbox', { id: sid(), kind: 'guide', pid: p.id, key: q.main, lang, to, name: p.client.name || q.name || '', at: Date.now() });
+  p.guide = { state: 'queued', at: Date.now(), to, key: q.main, lang }; await save(p);
+  if (manual) toast('Guide email queued for ' + to);
+  syncSoon();
+}
+async function flushGuides() {
+  for (const g of (await DB.all('outbox')).filter(x => x.kind === 'guide')) {
+    const p = mem.get(g.pid); if (!p) { await DB.del('outbox', g.id); continue; }
+    const pdf = await DB.get('blobs', 'guide:' + guideKey(g.key, g.lang));
+    if (!pdf) { if (!p.guide || p.guide.state !== 'missing') { p.guide = Object.assign({}, p.guide, { state: 'missing' }); await save(p, true); } continue; }
+    await sendGuide(g, pdf);
+    await DB.del('outbox', g.id);
+    p.guide = { state: 'sent', at: Date.now(), to: g.to, key: g.key, lang: g.lang }; await save(p, true);
+    toast('Full guide emailed to ' + g.to);
+    if (cur === p) refreshTabs(p);
+  }
+}
+
 /* ---------- sync ---------- */
 let syncing = false, again = false, lastSync = lsGet('hm-studio-lastsync', 0), syncErr = '';
 const syncSoon = debounce(() => sync(), 4000);
@@ -348,6 +423,9 @@ async function sync(manual) {
     }
     /* 3. rows waiting for the Google Sheets */
     for (const m of (await DB.all('outbox')).filter(x => x.kind === 'sheet').sort((a, b) => a.at - b.at)) { await appendRow(m.k, m.header, m.row, root); await DB.del('outbox', m.id); }
+    /* 4. guide PDFs, then guide emails waiting to go */
+    await syncGuides(root);
+    await flushGuides();
     lastSync = Date.now(); lsSet('hm-studio-lastsync', lastSync);
   } catch (e) {
     console.warn('sync', e);
@@ -384,7 +462,7 @@ let flushing = false;
 async function flushOutbox() {
   if (flushing || !navigator.onLine) return; flushing = true;
   try {
-    for (const m of (await DB.all('outbox')).filter(x => x.kind !== 'sheet')) {
+    for (const m of (await DB.all('outbox')).filter(x => x.kind !== 'sheet' && x.kind !== 'guide')) {
       try {
         const r = await fetch('https://formsubmit.co/ajax/' + INBOX, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(m.payload) });
         const j = await r.json().catch(() => ({}));
@@ -406,6 +484,7 @@ window.addEventListener('message', async e => {
     await save(p);
     if (d.email) { queueEmail(Object.assign({ 'Source': 'Home Muse Studio (in person)' }, d.email)); queueRow(logRow('quiz', p, d.email)); }
     toast('Archetype saved to ' + (p.client.name || 'the project') + ': ' + d.result.names.main.en);
+    if (p.guidePaid && (!p.guide || p.guide.key !== d.result.main || p.guide.state !== 'sent')) queueGuide(p);
     refreshTabs(p);
   } else if (d.kind === 'clarity-draft') {
     p.clarityDraft = { answers: d.answers, review: d.review, lang: d.lang, at: Date.now() };
@@ -517,6 +596,7 @@ function overview(p, pane) {
       <div class="row"><label class="f">Visit date<input type="date" data-k="visit" value="${esc(p.visit)}"></label>
       <label class="f">Status<select data-k="status">${STATUSES.map(s => `<option${s === p.status ? ' selected' : ''}>${s}</option>`).join('')}</select></label></div>
       <div class="f" style="margin-bottom:14px"><span class="small muted">Service</span><div class="chips" style="margin-top:6px">${SERVICES.map(s => `<button class="chip" data-svc="${esc(s)}" aria-pressed="${p.service === s}">${s}</button>`).join('')}</div></div>
+      <label style="display:flex;gap:10px;align-items:center;margin-bottom:16px"><input type="checkbox" id="paid" ${p.guidePaid ? 'checked' : ''} style="width:22px;height:22px;flex:none"><span>Full archetype guide included (already paid)<br><span class="small muted">The quiz won’t show the €19.99 offer, and the guide PDF is emailed to the client from your Gmail as soon as they finish.</span></span></label>
       <div class="f" style="margin-bottom:14px"><span class="small muted">Client’s language (for the quiz and questionnaire)</span><div class="chips" style="margin-top:6px"><button class="chip" data-lang="fr" aria-pressed="${p.lang === 'fr'}">Français</button><button class="chip" data-lang="en" aria-pressed="${p.lang === 'en'}">English</button></div></div>
       <label class="f">The project in a few words<textarea data-k="brief" placeholder="What they want, rooms concerned, budget, timing…" style="min-height:90px">${esc(p.brief)}</textarea></label>
     </section>
@@ -528,6 +608,8 @@ function overview(p, pane) {
           ${q.quote ? `<p class="q">${esc(q.quote.en)}</p>` : ''}
           ${q.swatches ? `<div class="sw">${q.swatches.map(s => `<span style="background:${esc(s[0])}" title="${esc(s[2])}"></span>`).join('')}</div>` : ''}
           <p class="small muted" style="margin:8px 0 0">Taken ${esc(fmtTime(q.at))}${q.guide ? ' · <b style="color:var(--gold-ink)">Full guide requested (€19.99)</b>' : ''}</p></div></div>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between">
+            <span class="small">${guideLine(p)}</span><button class="btn ghost sm" id="sendguide">${I.share} ${p.guide && p.guide.state === 'sent' ? 'Send again' : 'Send full guide'}</button></div>
           ${q.tips ? `<details style="margin-top:12px"><summary>Portrait, strength and first ideas</summary><p>${esc(q.portrait && q.portrait.en)}</p><p><b>Strength:</b> ${esc(q.strength && q.strength.en)}</p><p><b>Shadow:</b> ${esc(q.shadow && q.shadow.en)}</p><ol>${(q.tips.en || []).map(t => `<li>${esc(t)}</li>`).join('')}</ol></details>` : ''}`
         : `<p class="muted" style="margin:0">Not taken yet. Hand the iPad to your client: it takes five minutes, and the result is saved here.</p>`}
       </section>
@@ -550,6 +632,13 @@ function overview(p, pane) {
   pane.querySelectorAll('[data-k]').forEach(i => i.oninput = i.onchange = () => { p[i.dataset.k] = i.value; if (i.dataset.k === 'visit') root.querySelector('.top .kick').textContent = fmtDate(i.value); saveSoon(p); });
   pane.querySelectorAll('[data-svc]').forEach(b => b.onclick = () => { p.service = p.service === b.dataset.svc ? '' : b.dataset.svc; pane.querySelectorAll('[data-svc]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.svc === p.service))); save(p); });
   pane.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { p.lang = b.dataset.lang; pane.querySelectorAll('[data-lang]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.lang === p.lang))); save(p); });
+  document.getElementById('paid').onchange = e => { p.guidePaid = e.target.checked; save(p); };
+  const sg = document.getElementById('sendguide');
+  if (sg) sg.onclick = async () => {
+    const a = ARCH[p.quiz.main] || ['', ''], lang = p.quiz.lang || p.lang || 'fr', to = p.quiz.email || p.client.email;
+    if (!await dialog({ title: 'Email the full guide?', text: `${lang === 'fr' ? a[1] : a[0]} (${lang.toUpperCase()}) will be sent from your Gmail to ${to || 'the client'}.`, ok: 'Send' })) return;
+    await queueGuide(p, true); overview(p, pane);
+  };
   document.getElementById('delp').onclick = async () => {
     if (!await confirmBox('Delete this project?', `Everything for ${p.client.name || 'this client'} goes: notes, plans, photos and answers${G.linked() ? ' on this iPad, and its Google Drive folder goes to the Drive bin. The Google Sheet rows and emails are kept' : ''}.`)) return;
     p.deleted = 1;
@@ -557,6 +646,15 @@ function overview(p, pane) {
     else await purgeLocal(p);
     toast('Project deleted'); location.hash = '#/';
   };
+}
+function guideLine(p) {
+  const g = p.guide, a = p.quiz && ARCH[p.quiz.main], lang = (p.quiz && p.quiz.lang) || p.lang || 'fr';
+  const has = p.quiz && guideMeta()[guideKey(p.quiz.main, lang)];
+  if (g && g.state === 'sent') return `<span class="okline">Full guide emailed to ${esc(g.to)}</span> · ${esc(fmtTime(g.at))}`;
+  if (g && g.state === 'noemail') return '<span style="color:var(--danger)">Add the client’s email to send the guide</span>';
+  if (!has) return `<span style="color:var(--danger)">The guide for ${esc(a ? (lang === 'fr' ? a[1] : a[0]) : '')} (${lang.toUpperCase()}) isn’t in Studio yet</span> · add it in Settings${g && g.state ? ', the email will go out then' : ''}`;
+  if (g && (g.state === 'queued' || g.state === 'missing')) return G.linked() ? 'Guide email waiting to send' + (G.ready() ? '…' : ': tap the sync button to reconnect Google') : 'Connect Google Drive in Settings to send the guide';
+  return p.guidePaid ? 'Guide included: it will be emailed automatically' : 'Full guide not sent';
 }
 function reviewHTML(r, collapsed) {
   if (!r) return '';
@@ -569,6 +667,7 @@ function embed(p, pane, tab) {
   const quiz = tab === 'archetype';
   const prm = new URLSearchParams({ studio: p.id, lang: p.lang || 'fr', name: quiz ? (p.client.name || '').split(' ')[0] : (p.client.name || ''), email: p.client.email || '' });
   if (!quiz && p.client.phone) prm.set('phone', p.client.phone);
+  if (quiz && p.guidePaid) prm.set('paid', '1');
   if (!quiz) { const a = (p.clarity || p.clarityDraft || {}).answers; lsSet('hm-studio-clarity-' + p.id, a ? { A: a, lang: (p.clarity || p.clarityDraft).lang || p.lang } : null); }
   const src = (quiz ? '/quiz/?' : '/clarity/?') + prm.toString();
   const who = esc((p.client.name || 'your client').split(' ')[0]);
@@ -777,10 +876,10 @@ async function settings() {
         <details ${G.cid ? '' : 'open'}><summary><b style="font-weight:500">One-time setup (about 10 minutes, on a computer is easiest)</b></summary>
           <ol class="steps small" style="margin-top:10px">
             <li>Go to <b>console.cloud.google.com</b>, signed in with your Google account, and create a project called <b>Home Muse Studio</b>.</li>
-            <li>In <b>APIs &amp; Services → Library</b>, enable <b>Google Drive API</b> and <b>Google Sheets API</b>.</li>
+            <li>In <b>APIs &amp; Services → Library</b>, enable <b>Google Drive API</b>, <b>Google Sheets API</b> and <b>Gmail API</b> (Gmail is used to email the full guides to clients from your address).</li>
             <li>Open <b>Google Auth Platform</b> (or “OAuth consent screen”) and click <b>Get started</b>: app name <i>Home Muse Studio</i>, your email as support email, audience <b>External</b>. Then under <b>Audience → Test users</b>, add your own Google address.</li>
             <li>Under <b>Clients</b>, create a client of type <b>Web application</b>. In <b>Authorised JavaScript origins</b> add <code>${esc(origin)}</code>${origin.includes('www.') ? ` and <code>${esc(origin.replace('www.', ''))}</code>` : ''}. Save, then copy the <b>Client ID</b> (it ends in <code>.apps.googleusercontent.com</code>).</li>
-            <li>Paste the Client ID below and tap <b>Connect Google Drive</b>. Google may warn that the app isn’t verified: that’s expected for your own private app, tap <b>Continue</b>.</li>
+            <li>Paste the Client ID below and tap <b>Connect Google Drive</b>. Google may warn that the app isn’t verified: that’s expected for your own private app, tap <b>Continue</b>, and tick every box (Drive and “Send email on your behalf”).</li>
           </ol>
         </details>
         <form id="gform" style="margin-top:16px">
@@ -796,6 +895,10 @@ async function settings() {
         <p style="display:flex;gap:8px;flex-wrap:wrap;margin:0"><button class="btn ghost" id="backup">${I.download} Download a backup</button>
         <label class="btn ghost" style="cursor:pointer">${I.share} Restore a backup<input type="file" accept=".json,application/json" hidden id="restore"></label></p>
         <p class="muted small" style="margin:10px 0 0">The backup file holds every project with its photos. Save it to iCloud Drive or Files.</p>
+      </section>
+      <section class="card"><h2>Full archetype guides</h2>
+        <p class="muted small" style="margin:0 0 12px">Add each guide PDF once. When a client has paid, Studio attaches the right one to the email. ${G.linked() ? 'Copies are kept in the “Full archetype guides” folder of your Drive.' : ''}</p>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px 10px;align-items:center">${Object.entries(ARCH).map(([k, a]) => `<span>${esc(a[0])}<br><span class="small muted">${esc(a[1])}</span></span>${['en', 'fr'].map(l => { const m = guideMeta()[guideKey(k, l)]; return m && !m.removed ? `<button class="chip" data-gdel="${guideKey(k, l)}" aria-pressed="true" title="${esc(m.name)}">✓ ${l.toUpperCase()}</button>` : `<label class="chip" style="cursor:pointer;display:inline-flex;align-items:center">+ ${l.toUpperCase()}<input type="file" accept="application/pdf,.pdf" hidden data-gadd="${guideKey(k, l)}"></label>`; }).join('')}`).join('')}</div>
       </section>
       <section class="card"><h2>Drawing</h2>
         <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="finger" ${(() => { try { return localStorage.getItem('hm-finger') === '1'; } catch (e) { return false; } })() ? 'checked' : ''} style="width:22px;height:22px"> Draw with my finger as well as the Pencil</label>
@@ -816,10 +919,26 @@ async function settings() {
   };
   if (q('syncnow')) q('syncnow').onclick = async () => { await sync(true); settings(); };
   if (q('signout')) q('signout').onclick = async () => { if (!await confirmBox('Disconnect Google Drive?', 'Your projects stay on this iPad and in Drive. Changes will sync again when you reconnect.', 'Disconnect')) return; G.unlink(); settings(); };
+  root.querySelectorAll('[data-gadd]').forEach(inp => inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    if (f.type && f.type !== 'application/pdf') { toast('Please choose a PDF'); return; }
+    const k = inp.dataset.gadd, m = guideMeta();
+    const old = m[k] && m[k].gid;
+    await DB.put('blobs', f, 'guide:' + k);
+    m[k] = { name: f.name, at: Date.now(), gid: null, old: old || (m[k] && m[k].old) || null };
+    setGuideMeta(m); toast('Guide added');
+    flushGuidesLater(); settings();
+  });
+  root.querySelectorAll('[data-gdel]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.gdel, m = guideMeta();
+    if (!await confirmBox('Remove this guide?', `${m[k].name} will be removed from Studio${m[k].gid ? ' and its copy moved to the Drive bin' : ''}.`, 'Remove')) return;
+    await DB.del('blobs', 'guide:' + k); if (m[k].gid) m[k].removed = 1; else delete m[k]; setGuideMeta(m); syncSoon(); settings();
+  });
   q('finger').onchange = e => { try { localStorage.setItem('hm-finger', e.target.checked ? '1' : '0'); } catch (x) {} };
   q('backup').onclick = backup;
   q('restore').onchange = e => restore(e.target.files[0]);
 }
+const flushGuidesLater = () => { if (G.ready()) sync(); else syncSoon(); };
 const toDataURL = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
 async function backup() {
   toast('Preparing the backup…', 10000);

@@ -130,6 +130,7 @@ input[type=text],input[type=email]{width:100%;margin-top:6px;min-height:48px;pad
 const ENDPOINT = 'https://formsubmit.co/ajax/contact@homemuse.fr';
 /* Home Muse Studio (/studio/) opens this page in a frame with ?studio=<project id>: results go to the project, and the studio emails them. */
 const QS = new URLSearchParams(location.search), STUDIO = QS.get('studio');
+const PAID = !!STUDIO && QS.get('paid') === '1';
 const toStudio = m => { try{ parent.postMessage(Object.assign({type:'hm-studio',pid:STUDIO},m), location.origin); }catch(e){} };
 
 const A = {
@@ -287,7 +288,7 @@ const T = {
   offL:['Votre portrait complet : vos forces, votre part d’ombre et ce dont votre maison a vraiment besoin','Votre élément Feng Shui expliqué : ses couleurs, ses formes et ses matières','5 conseils Feng Shui pour votre archétype, avec le pourquoi et une action à faire dès ce week-end','5 conseils de home staging et une check-list pièce par pièce','Une page sur votre archétype secondaire','Les erreurs à éviter pour votre archétype','Environ 12 à 15 pages, en français ou en anglais'],
   offN:'Lou prépare et vous envoie votre guide personnellement par e-mail, avec le lien de paiement.',
   offB:'Commander mon guide complet · 19,99 €',offD:'Merci ! Lou vous écrit très vite par e-mail avec votre lien de paiement et votre guide complet.',
-  again:'Refaire le quiz',foot:'Home Muse · Home staging et Feng Shui sur la Côte d’Azur'},
+  again:'Refaire le quiz',incT:'Votre guide complet est inclus',incP:'Il fait partie de votre accompagnement : Lou vous l’envoie par e-mail, avec toutes les pistes pour votre archétype, pièce par pièce.',foot:'Home Muse · Home staging et Feng Shui sur la Côte d’Azur'},
  en:{kick:'The Home Muse quiz',title:'Which home archetype are you?',lede:'Discover which of the seven home archetypes you are, what it reveals about the way you live, and what your home truly needs to support you. Fifteen questions, five minutes.',start:'Start the quiz',of:'of',back:'← Back',
   formT:'Your result is ready!',formL:'Where should we send it?',name:'First name',mail:'Email',consent:'I agree to receive my result and emails from Home Muse. I can unsubscribe at any time.',see:'See my result',
   eName:'Please add your first name.',eMail:'Please add a valid email address.',eCons:'Please tick the box to receive your result.',
@@ -298,7 +299,7 @@ const T = {
   offL:['Your complete portrait: your strengths, your shadow and what your home really needs','Your Feng Shui element explained: its colours, shapes and materials','5 Feng Shui tips for your archetype, each with why it works and one thing to do this weekend','5 home staging tips and a room-by-room checklist','A page on your secondary archetype','The mistakes to avoid for your archetype','About 12–15 pages, in English or French'],
   offN:'Lou prepares your guide and sends it to you personally by email, with the payment link.',
   offB:'Order my full guide · €19.99',offD:'Thank you! Lou will email you very soon with your payment link and your full guide.',
-  again:'Take the quiz again',foot:'Home Muse · Home staging and Feng Shui on the Côte d’Azur'}
+  again:'Take the quiz again',incT:'Your full guide is included',incP:'It’s part of your package: Lou is sending it to you by email, with everything for your archetype, room by room.',foot:'Home Muse · Home staging and Feng Shui on the Côte d’Azur'}
 };
 
 let lang = (document.documentElement.lang||'en').toLowerCase().startsWith('fr') ? 'fr' : 'en';
@@ -341,7 +342,7 @@ function send(extra){
     _replyto: person.email, _template: 'table', _captcha: 'false'
   };
   if(STUDIO){
-    toStudio({kind:'quiz', email:data, result:{main:r.main, second:r.second, color:A1.c, scores:r.s, lang, guide, name:person.name, email:person.email,
+    toStudio({kind:'quiz', email:data, result:{main:r.main, second:r.second, color:A1.c, scores:r.s, lang, guide, included:PAID, name:person.name, email:person.email,
       names:{main:{en:A1.en,fr:A1.fr}, second:{en:A2.en,fr:A2.fr}}, quote:A1.q, portrait:A1.p, strength:A1.s, shadow:A1.sh, tips:A1.t, swatches:A1.sw}});
     return;
   }
@@ -429,11 +430,11 @@ function render(){
         <p><strong>${t.mat}</strong> ${esc(a.pal[lang].split(' · ')[1]||'')}</p>${r.main==='ATE'?`<p class="small">${t.ateNote}</p>`:''}</div>
       <div class="box sec"><h3>${t.secT}${lang==='fr'?' :':':'} ${esc(b[lang])}</h3><p>${esc(b.s[lang])} ${esc(b.q[lang])}</p></div>
       <div class="tips"><h3>${t.tips}</h3><ol>${a.t[lang].map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>
-      <div class="offer"><div class="offhead"><h3>${t.offT}</h3><span class="price">${t.price}</span></div>
+      ${PAID ? `<div class="offer"><h3>${t.incT}</h3><p style="margin:0">${t.incP}</p></div>` : `<div class="offer"><div class="offhead"><h3>${t.offT}</h3><span class="price">${t.price}</span></div>
         <p>${t.offP}</p>
         <ul>${t.offL.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
         <p class="note">${t.offN}</p>
-        ${requested?`<p class="done">${t.offD}</p>`:`<button class="btn" id="req">${t.offB}</button>`}</div>
+        ${requested?`<p class="done">${t.offD}</p>`:`<button class="btn" id="req">${t.offB}</button>`}</div>`}
       <p style="margin-top:24px"><button class="back" id="again">${t.again}</button></p></div>`;
     const rq=document.getElementById('req');
     if(rq) rq.onclick=()=>{ requested=true; send({consent:true,pdf_requested:true}); render(); };
